@@ -1,4 +1,5 @@
-DGGS python extensions
+# OM_DGGS_python_extensions
+Oasis montaj DGGS python extensions
 
 Date: 2025-06-11
 Author: Eric Petersen
@@ -24,3 +25,7 @@ NOTE: GX Developer will need to be installed on your machine/Oasis montaj instan
 To do this, open a command prompt window (Anaconda Prompt works well) and type "pip install geosoft".
 If you encounter admin privilege errors, one possible solution is to run command prompt as
 administrator and use the command "python -m pip install geosoft".
+
+
+Detailed descriptions of the function of various extensions are given in comment headings
+within the python files.
