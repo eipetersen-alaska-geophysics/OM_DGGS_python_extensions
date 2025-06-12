@@ -6,15 +6,11 @@ Author: Eric Petersen
 
 How-to:
 
-1) Copy python scripts from 
-\\morta.dnr.state.ak.us\geophysics\projects\magnetic_qc_working\python_extensions\python\
-to:
-C:\Users\$USERNAME$\Documents\Geosoft\Desktop Applications\python\
+1) Copy python scripts from here to:
+C:\Users\\$USERNAME$\Documents\Geosoft\Desktop Applications\python\
 
-2) Copy omn files from
-\\morta.dnr.state.ak.us\geophysics\projects\magnetic_qc_working\python_extensions\omn\
-to:
-C:\Users\$USERNAME$\Documents\Geosoft\Desktop Applications\omn\
+2) Copy omn files from here to:
+C:\Users\\$USERNAME$\Documents\Geosoft\Desktop Applications\omn\
 
 3) In Oasis montaj, go to menu: Project > Manage Menus. In the window that pops up, scroll
 to the bottom where it has "User Menus" and select "DGGS." Click OK. The menus will reload
