@@ -49,6 +49,13 @@ POTENTIAL FUTURE WORK/UPDATES:
     - Implement new magHFnoise_v2.2 filter from GSC.
     - Implement user input for .gdb to run extension on (maybe not necessary).
     - Implement user input for location to output auto summary files (maybe not necessary).
+
+UPDATE 2025-06-18 by Eric Petersen
+    - Fixed OOS determination for diurnal 60 second chord (was erroneously referencing 15 second chord in this calculation)
+    - Added OOS masks as new channels for Diurnal OOS (15 and 60 second chords separately), 4th Difference OOS. Previously
+        had OOS mask for drape only.
+    - Added average speed as an output for the segment summary file for drape OOS.
+    - Added flight number to OOS diurnal and noise outputs.
 """
 
 import numpy as np
@@ -82,7 +89,7 @@ def shift_right(arr, shift_number=1):
     shifted[:shift_number] = np.nan
     return shifted
 
-def auto_drape_analysis(flight, line, flt_alt, drape, step_dist, fid, ztol=15, dtol=800):
+def auto_drape_analysis(flight, line, flt_alt, drape, step_dist, speed, fid, ztol=15, dtol=800):
     """
     Function to automatically identify sections of the flight which are out of spec for drape.
     Inputs, with the exception of flight, line, ztol, & dtol, are expected to be numpy arrays derived
@@ -106,15 +113,16 @@ def auto_drape_analysis(flight, line, flt_alt, drape, step_dist, fid, ztol=15, d
                 length_OOS
                 max_drape_dev (maximum deviance from drape tolerance)
                 avg_drape_dev (average deviance from drape tolerance)
+                avg_speed (average speed during the OOS segment)
         OOS_drape_mask = mask of where the flight is out of spec of the drape.
     """
     # Prepare results dataframe
-    results = pd.DataFrame(columns=['Flight', 'Line', 'Fid_start','Fid_end','Length_OOS','Max_drape_dev','Avg_drape_dev'])
+    results = pd.DataFrame(columns=['Flight', 'Line', 'Fid_start','Fid_end','Length_OOS','Max_drape_dev','Avg_drape_dev','Avg_speed'])
 
     # Calculate drape deviations and define out-of-spec (OOS) records
     drape_deviance = flt_alt - drape # raw drape deviance
     OOS_drape = ((drape_deviance > ztol) | (drape_deviance < -ztol)) #index for flight over or under drape tolerance
-    OOS_drape_mask = OOS_drape.astype('int8')
+    OOS_drape_mask = OOS_drape.astype('int8') # OOS drape mask to prep for saving in channel
 
     #gxapi.GXSYS.display_message("Debugging.... OOS_drape_mask", "{}".format(OOS_drape_mask))
     
@@ -134,7 +142,7 @@ def auto_drape_analysis(flight, line, flt_alt, drape, step_dist, fid, ztol=15, d
     for seg_start, seg_end in zip(seg_starts, seg_ends):
         seg_distance = np.nansum(step_dist[seg_start:seg_end]) # calculate total distance along segment
         if seg_distance < dtol: # disregard if segment is shorter than dtol (default 800 m)
-            OOS_drape_mask[seg_start:seg_end] = 0
+            OOS_drape_mask[seg_start:seg_end] = 0 # OOS drape mask to prep for saving in channel; remove the segment if < 800 m
             continue
         else: 
             num_segs += 1 # Keep count number of OOS segments
@@ -144,7 +152,7 @@ def auto_drape_analysis(flight, line, flt_alt, drape, step_dist, fid, ztol=15, d
             elif np.sign(drape_deviance[seg_start]) == -1:
                 extrema = np.nanmin(drape_deviance[seg_start:seg_end])
             # Record results
-            results.loc[len(results)] = [flight, line, fid[seg_start], fid[seg_end], seg_distance, extrema, np.nanmean(drape_deviance[seg_start:seg_end])]
+            results.loc[len(results)] = [flight, line, fid[seg_start], fid[seg_end], seg_distance, extrema, np.nanmean(drape_deviance[seg_start:seg_end]), np.nanmean(speed[seg_start:seg_end])]
     
     # Return results
     if num_segs > 0:
@@ -166,9 +174,9 @@ def rungx():
     out_path_diurnal = out_path + '/OOS_diurnal.csv'
     out_path_drape = out_path + '/OOS_drape.csv'
     # Pandas dataframes for storing summary values:
-    noise_summary = pd.DataFrame(columns=['Line','OOS_Count'])
-    diurnal_summary = pd.DataFrame(columns=['Line', 'OOS_Count_15chord', 'OOS_Count_60chord'])
-    drape_summary = pd.DataFrame(columns=['Flight', 'Line', 'Fid_start','Fid_end','Length_OOS','Max_drape_dev','Avg_drape_dev'])
+    noise_summary = pd.DataFrame(columns=['Flight', 'Line','OOS_Count'])
+    diurnal_summary = pd.DataFrame(columns=['Flight', 'Line', 'OOS_Count_15chord', 'OOS_Count_60chord'])
+    drape_summary = pd.DataFrame(columns=['Flight', 'Line', 'Fid_start','Fid_end','Length_OOS','Max_drape_dev','Avg_drape_dev','Avg_speed'])
 
     ################## SELECT DATABASE ####################################################
     # Prompt user to select database, default to current if any
@@ -196,6 +204,8 @@ def rungx():
     chrd_Lmag60_channel = add_channel(gdb, "chrd_LmagD60")
     L_magDIFF15_channel = add_channel(gdb, "L_magDIFF15")
     L_magDIFF60_channel = add_channel(gdb, "L_magDIFF60")
+    diurnal_15chord_OOS_channel = add_channel(gdb, "diurnal_15chord_OOS_mask", dtype='int8') # Diurnal 15 second chord out-of-spec mask
+    diurnal_60chord_OOS_channel = add_channel(gdb, "diurnal_60chord_OOS_mask", dtype='int8') # Diurnal 60 second chord out-of-spec mask
 
     # Speed and Drape Analysis:
     drape_p15_channel = add_channel(gdb, "drape_p15") # Drape plus 15 m
@@ -207,6 +217,7 @@ def rungx():
     # Noise channels:
     MAGCOM_2nd_channel = add_channel(gdb, "MAGCOM_2nd") # 2nd difference
     MAGCOM_4th_channel = add_channel(gdb, "MAGCOM_4th") # 4th difference
+    mag_4th_diff_OOS_channel = add_channel(gdb, "mag_4th_diff_OOS_mask", dtype='int8') # 4th difference out-of-spec mask
 
     # Constant Value Channels:
     p_3_channel = add_channel(gdb, "p_3") # Positive 3.0 (for comparison to 60 second chord)
@@ -259,7 +270,9 @@ def rungx():
         # Calculate L_magDIFF15
         L_magDIFF15_values = DIURNAL - chrd_Lmag15_values # Calculate the difference
         gdb.write_channel(line, L_magDIFF15_channel, L_magDIFF15_values, fid) # Write the DIFF to the gdb
-        OOS_15 = sum ( (np.abs(L_magDIFF15_values) > 0.5)) # Number of data points for which 15 sec Diurnal chord is out-of-spec.
+        OOS_15_mask = (np.abs(L_magDIFF15_values) > 0.5)
+        OOS_15 = sum ( OOS_15_mask) # Number of data points for which 15 sec Diurnal chord is out-of-spec.
+        gdb.write_channel(line, diurnal_15chord_OOS_channel, OOS_15_mask.astype('int8'), fid) # Write the OOS mask to gdb
 
         ################ DIURNAL QC FOR 60 SECOND CHORD #########################
         # Calculate L_magD_60
@@ -271,12 +284,14 @@ def rungx():
         # Calculate L_magDIFF60
         L_magDIFF60_values = DIURNAL - chrd_Lmag60_values # Calculate the difference
         gdb.write_channel(line, L_magDIFF60_channel, L_magDIFF60_values, fid) # Write the DIFF to the gdb
-        OOS_60 = sum ( (np.abs(L_magDIFF15_values) > 3)) # Number of data points for which 60 sec Diurnal chord is out-of-spec.
+        OOS_60_mask = (np.abs(L_magDIFF60_values) > 3) # Mask for where 60 sec diurnal is out-of-spec
+        OOS_60 = sum ( OOS_60_mask) # Number of data points for which 60 sec Diurnal chord is out-of-spec. .astype('int8')
+        gdb.write_channel(line, diurnal_60chord_OOS_channel, OOS_60_mask.astype('int8'), fid) # Write the OOS mask to gdb
 
         # Record out-of-spec summary for diurnals:
         if OOS_15 > 0 or OOS_60 > 0:
             OOS_diurnal_line_count += 1 # add to the line count.
-            diurnal_summary.loc[len(diurnal_summary)] = [line, OOS_15, OOS_60]
+            diurnal_summary.loc[len(diurnal_summary)] = [flight_num, line, OOS_15, OOS_60]
 
         ################ DRAPE AND SPEED QC #########################
         gdb.write_channel(line, drape_p15_channel, SURFACE+15, fid) # Drape surface plus 15 m
@@ -290,7 +305,7 @@ def rungx():
         gdb.write_channel(line, speed_channel, speed_values, fid) # Write speed values to gdb.
 
         # Detect and record out-of-spec segments for drape:
-        OOS_drape, OOS_drape_mask = auto_drape_analysis(flight_num, line, GPSALT, SURFACE, step_distance, FIDCOUNT) # calling function defined above
+        OOS_drape, OOS_drape_mask = auto_drape_analysis(flight_num, line, GPSALT, SURFACE, step_distance, speed_values, FIDCOUNT) # calling function defined above
         gdb.write_channel(line, drape_OOS_channel, OOS_drape_mask, fid) # Write the drape OOS mask to the gdb.
         if OOS_drape is not None:
             drape_summary = pd.concat([drape_summary, OOS_drape], ignore_index=True) # add OOS drape segments to summary dataframe
@@ -300,10 +315,12 @@ def rungx():
         gdb.write_channel(line, MAGCOM_2nd_channel, np.diff(MAGCOM, n=2), fid) # save 2nd difference to gdb
         gdb.write_channel(line, MAGCOM_4th_channel, MAG_4th_diff, fid) # save 4th difference to gdb
         # Identify if there is OOS 4th difference on this line:
-        OOS_4th = sum ( (np.abs(MAG_4th_diff) > 0.01)) # Number of data points for which 4th difference noise out-of-spec.
+        OOS_4th_mask = (np.abs(MAG_4th_diff) > 0.01) # Where 4th diff noise out-of-spec mask.
+        OOS_4th = sum ( OOS_4th_mask) # Number of data points for which 4th difference noise out-of-spec.
+        gdb.write_channel(line, mag_4th_diff_OOS_channel, OOS_4th_mask.astype('int8'), fid) # Write the OOS mask to gdb
         if OOS_4th>0: # If any out of spec records.
             OOS_4th_line_count += 1 # add a line to the count!
-            noise_summary.loc[len(noise_summary)] = [line, OOS_4th] # Append the line to the noise_summary.
+            noise_summary.loc[len(noise_summary)] = [flight_num, line, OOS_4th] # Append the line to the noise_summary.
 
     ################ SAVE SUMMARY FILES #########################
     # Noise summary
