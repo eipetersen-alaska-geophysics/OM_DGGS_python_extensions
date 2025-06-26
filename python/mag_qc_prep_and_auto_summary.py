@@ -85,6 +85,13 @@ In "auto_drape_analysis" function:
 I (Eric) also added a check in the "auto_drape_analysis" function to make sure that all the channel value arrays for
 the line being analyzed are the same length. If they are not, an error is thrown. They should all be the same length
 if called from within the geosoft extension.
+
+##################### UPDATE 2025-06-26 by Eric Petersen #####################
+Was previously calculating 4th difference using np.diff(data, n=4); updated to use
+the proper symmetric 4th difference formula used by GSC for airborne magnetic QC.
+Comparing this to the numpy calculation I find that the results are essentially exactly
+the same; they are just shifted in their indices. However we do want to use the 
+properly documented/industry standard formula!
 """
 
 import numpy as np
@@ -120,6 +127,27 @@ def shift_right(arr, shift_number=1):
     shifted[shift_number:] = arr[:-shift_number]
     shifted[:shift_number] = np.nan
     return shifted
+
+def fourth_difference(data):
+    """ Calculate fourth difference filter an an array of data"""
+
+    if len(data) < 5:
+        raise ValueError("Data array must contain at least 5 points for 4th difference.")
+    
+    # Calculate 4th difference
+    diff4 = (            # M_delta4_i
+        data[0:-4]       # M_{i-2}
+        - 4 * data[1:-3] # -4 * M_{i-1}
+        + 6 * data[2:-2] # +6 * M_{i}
+        - 4 * data[3:-1] # -4 * M_{i+1}
+        + data[4:]       # + M_{i+2}
+    )
+    
+    # Pad with NaNs at start and end
+    diff4_padded = np.full_like(data, np.nan, dtype=float)
+    diff4_padded[2:-2] = diff4
+    
+    return diff4_padded
 
 def auto_drape_analysis(flight, line, flt_alt, drape, step_dist, speed, fid, ztol=15, dtol=800):
     """
@@ -355,7 +383,7 @@ def rungx():
             drape_summary = pd.concat([drape_summary, OOS_drape], ignore_index=True) # add OOS drape segments to summary dataframe
 
         ################ NOISE QC #########################
-        MAG_4th_diff = np.diff(MAGCOM, n=4) # 4th difference values. Discrete. Non-normalized.
+        MAG_4th_diff = fourth_difference(MAGCOM) # 4th difference values. Discrete. Non-normalized. Was originally calculated using #np.diff(MAGCOM, n=4)
         gdb.write_channel(line, MAGCOM_2nd_channel, np.diff(MAGCOM, n=2), fid) # save 2nd difference to gdb
         gdb.write_channel(line, MAGCOM_4th_channel, MAG_4th_diff, fid) # save 4th difference to gdb
         # Identify if there is OOS 4th difference on this line:
