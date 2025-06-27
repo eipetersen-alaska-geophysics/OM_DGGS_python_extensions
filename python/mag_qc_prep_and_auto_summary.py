@@ -149,7 +149,7 @@ def fourth_difference(data):
     
     return diff4_padded
 
-def auto_drape_analysis(flight, line, flt_alt, drape, step_dist, speed, fid, ztol=15, dtol=800):
+def auto_drape_analysis(flight, line, drape_deviance, step_dist, speed, fid, ztol=15, dtol=800):
     """
     Function to automatically identify sections of the flight which are out of spec for drape.
     Inputs, with the exception of flight, line, ztol, & dtol, are expected to be numpy arrays derived
@@ -180,11 +180,10 @@ def auto_drape_analysis(flight, line, flt_alt, drape, step_dist, speed, fid, zto
     results = pd.DataFrame(columns=['Flight', 'Line', 'Fid_start','Fid_end','Length_OOS','Max_drape_dev','Avg_drape_dev','Avg_speed'])
 
     # Raise value error if flt_alt, drape, step_dist, speed, fid not all the same length.
-    if not len(flt_alt) == len(drape) == len(step_dist) == len(speed) == len(fid):
+    if not len(drape_deviance) == len(step_dist) == len(speed) == len(fid):
         raise ValueError("Channel arrays for auto drape analysis are not all the same length.")
 
     # Calculate drape deviations and define out-of-spec (OOS) records
-    drape_deviance = flt_alt - drape # raw drape deviance
     OOS_drape = ((drape_deviance > ztol) | (drape_deviance < -ztol)) #index for flight over or under drape tolerance
     OOS_drape_mask = OOS_drape.astype('int8') # OOS drape mask to prep for saving in channel
 
@@ -215,6 +214,7 @@ def auto_drape_analysis(flight, line, flt_alt, drape, step_dist, speed, fid, zto
                 extrema = np.nanmax(drape_deviance[seg_start:seg_end])
             elif np.sign(drape_deviance[seg_start]) == -1:
                 extrema = np.nanmin(drape_deviance[seg_start:seg_end])
+                OOS_drape_mask[seg_start:seg_end] = -1
             # Record results
             if len(fid) > max(seg_start, seg_end): # Make sure that the segment indices are in bounds for the channel value arrays.
                 results.loc[len(results)] = [flight, line, fid[seg_start], fid[seg_end], seg_distance, extrema, np.nanmean(drape_deviance[seg_start:seg_end]), np.nanmean(speed[seg_start:seg_end])]
@@ -283,7 +283,8 @@ def rungx():
     drape_p15_channel = add_channel(gdb, "drape_p15") # Drape plus 15 m
     drape_m15_channel = add_channel(gdb, "drape_m15") # Drape minus 15 m
     speed_channel = add_channel(gdb, "speed") # Speed
-    step_distance_channel = add_channel(gdb, "step_distance") # Speed
+    step_distance_channel = add_channel(gdb, "step_distance") # Step distance
+    drape_deviation_channel = add_channel(gdb, "drape_deviation") # Flight altitude deviation from drape.
     drape_OOS_channel = add_channel(gdb, "drape_OOS_mask", dtype='int8') # Drape out-of-spec mask
 
     # Noise channels:
@@ -373,11 +374,13 @@ def rungx():
         #           to data recorded in different Hz.
         step_distance = np.sqrt( (shift_right(EASTING) - EASTING)**2 + (shift_right(NORTHING) - NORTHING)**2 )
         speed_values = step_distance / (UTCTIME - shift_right(UTCTIME))
+        drape_deviation = GPSALT - SURFACE # deviation from drape
+        gdb.write_channel(line, drape_deviation_channel, drape_deviation, fid) # Write drape deviation values to gdb.
         gdb.write_channel(line, step_distance_channel, step_distance, fid) # Write step distance values to gdb.
         gdb.write_channel(line, speed_channel, speed_values, fid) # Write speed values to gdb.
 
         # Detect and record out-of-spec segments for drape:
-        OOS_drape, OOS_drape_mask = auto_drape_analysis(flight_num, line, GPSALT, SURFACE, step_distance, speed_values, FIDCOUNT) # calling function defined above
+        OOS_drape, OOS_drape_mask = auto_drape_analysis(flight_num, line, drape_deviation, step_distance, speed_values, FIDCOUNT) # calling function defined above
         gdb.write_channel(line, drape_OOS_channel, OOS_drape_mask, fid) # Write the drape OOS mask to the gdb.
         if OOS_drape is not None:
             drape_summary = pd.concat([drape_summary, OOS_drape], ignore_index=True) # add OOS drape segments to summary dataframe
