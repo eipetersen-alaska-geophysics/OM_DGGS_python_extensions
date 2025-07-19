@@ -97,20 +97,15 @@ properly documented/industry standard formula!
 import numpy as np
 import pandas as pd
 import os
-import geosoft.gxapi as gxapi
-import geosoft.gxpy as gxpy
-import geosoft.gxpy.gdb as gxdb
-import geosoft.gxpy.utility as gxutil
-import geosoft.gxpy.project as gxproj
+import click
 
 ################## FUNCTIONS USED BY SCRIPT ####################################################
 
 def add_channel(gdb, name, dtype="float"):
     """Create a new channel with standard properties. Datatype float."""
-    if name not in gdb.list_channels():
-        return gxdb.Channel.new(gdb, name, dtype=dtype)
-    else:
-        return gxdb.Channel(gdb, name) # If channel already exists then return it as an object.
+    if name not in gdb.columns:
+        gdb[name] = pd.Series(dtype=dtype)
+    return gdb[name]
 
 def interpolate_array(arr):
     """Interpolate an array linearly."""
@@ -187,7 +182,7 @@ def auto_drape_analysis(flight, line, drape_deviance, step_dist, speed, fid, zto
     OOS_drape = ((drape_deviance > ztol) | (drape_deviance < -ztol)) #index for flight over or under drape tolerance
     OOS_drape_mask = OOS_drape.astype('int8') # OOS drape mask to prep for saving in channel
 
-    #gxapi.GXSYS.display_message("Debugging.... OOS_drape_mask", "{}".format(OOS_drape_mask))
+    #print("Debugging.... OOS_drape_mask", "{}".format(OOS_drape_mask))
     
     # Find starts and ends to continuous segments of OOS_drape:
     d = np.diff(OOS_drape.astype(int))
@@ -228,9 +223,11 @@ def auto_drape_analysis(flight, line, drape_deviance, step_dist, speed, fid, zto
         return None, OOS_drape_mask
 
 ################## ACTUAL SCRIPT THAT RUNS IN OM MENU ####################################################
-def rungx():
-    gxp = gxpy.gx.gx()
-
+@click.command()
+@click.argument('in_path', type=click.Path(exists=True))
+@click.argument('out_path', type=click.Path(), default=".")
+@click.option('--verbose', is_flag=True, help='Enable verbose output.')
+def rungx(in_path, out_path, verbose):
     ################## Constants ####################################################
     diurnal_15chord_OOS_threshold = 0.5 # OOS threshold for diurnal 15 second chord
     diurnal_60chord_OOS_threshold = 3 # OOS threshold for diurnal 60 second chord
@@ -238,10 +235,10 @@ def rungx():
 
     ################## QC Summaries Prep ####################################################
     # Out path for QC Summaries
-    out_path = gxutil.folder_workspace() + 'QC_auto_summaries\\' # Workspace/project folder + QC_auto_summaries.
     if out_path:
         os.makedirs(out_path, exist_ok=True)
     # Prep output file paths
+    out_path_data = out_path + '/data.csv'
     out_path_noise = out_path + '/OOS_4th_difference.csv'
     out_path_diurnal = out_path + '/OOS_diurnal.csv'
     out_path_drape = out_path + '/OOS_drape.csv'
@@ -251,23 +248,7 @@ def rungx():
     drape_summary = pd.DataFrame(columns=['Flight', 'Line', 'Fid_start','Fid_end','Length_OOS','Max_drape_dev','Avg_drape_dev','Avg_speed'])
 
     ################## SELECT DATABASE ####################################################
-    # Prompt user to select database, default to current if any
-    #db_path = gxapi.GXEDB.user_select("Select a database", "GDB", "", "")
-    #db_path = gxproj.get_user_input(title='Select GDB to Perform QC Prep On',
-     #                               prompt ='GBD:',
-      #                              kind='file',
-       #                             filemask='*.grd')
-    db_path = None
-    if not db_path: # Select currently open geodatabase.
-        gdb = gxdb.Geosoft_gdb.open()
-        if gdb is None:
-            gxapi.GXSYS.display_message("GX", "No database selected or open.")
-            return
-    else:
-        gdb = gxdb.Geosoft_gdb.open(db_path)
-
-    # Select all lines
-    gdb.select_lines(gdb.list_lines())
+    gdb = pd.read_csv(in_path).set_index(["Line", "FIDCOUNT"])
 
     ################### ADD CHANNELS ####################################################
 
@@ -307,31 +288,32 @@ def rungx():
     OOS_4th_line_count = 0
     OOS_diurnal_line_count = 0
     ################### WORK THROUGH EACH LINE: ####################################################
-    for line in gdb.list_lines():
+    for line in gdb.index.get_level_values('Line').unique():
         # Retrieve data in array format for channel math:
-        UTCTIME, fid = gdb.read_channel(line, 'UTCTIME')
-        DIURNAL, fid = gdb.read_channel(line, 'DIURNAL')
-        EASTING, fid = gdb.read_channel(line, 'EASTING')
-        NORTHING, fid = gdb.read_channel(line, 'NORTHING')
-        SURFACE, fid = gdb.read_channel(line, 'SURFACE')
-        MAGCOM, fid = gdb.read_channel(line, 'MAGCOM')
-        GPSALT, fid = gdb.read_channel(line, 'GPSALT')
-        FLIGHT, fid = gdb.read_channel(line, 'FLIGHT')
-        FIDCOUNT, fid = gdb.read_channel(line, 'FIDCOUNT')
+        UTCTIME = gdb.loc[line, 'UTCTIME'].values
+        DIURNAL = gdb.loc[line, 'Diurnal'].values
+        EASTING = gdb.loc[line, 'Easting'].values
+        NORTHING = gdb.loc[line, 'Northing'].values
+        SURFACE = gdb.loc[line, 'Surface'].values
+        MAGCOM = gdb.loc[line, 'MAGCOM'].values
+        GPSALT = gdb.loc[line, 'GPSALT'].values
+        FLIGHT = gdb.loc[line, 'Flight'].values
+        FIDCOUNT = gdb.loc[line].index.get_level_values('FIDCOUNT').values
         flight_num = FLIGHT[0]
 
         ################ CONSTANT VALUE ARRAYS AND CHANNELS FOR PLOTTING/ANALYSIS #########################
         dummy = np.full_like(DIURNAL, np.nan, dtype=float) # To be used for infilling with dummy values.
         ones = np.full_like(DIURNAL, 1, dtype=float) # To be used for infilling with constant values.
-        gdb.write_channel(line, p_3_channel, ones*3, fid) # Positive 3
-        gdb.write_channel(line, m_3_channel, ones*-3, fid) # Negative 3
-        gdb.write_channel(line, p_0p5_channel, ones*0.5, fid) # Positive 0.5
-        gdb.write_channel(line, m_0p5_channel, ones*-0.5, fid) # Negative 0.5
-        gdb.write_channel(line, p_0p05_channel, ones*0.05, fid) # Positive 0.05
-        gdb.write_channel(line, m_0p05_channel, ones*-0.05, fid) # Negative 0.05
-        gdb.write_channel(line, p_0p01_channel, ones*0.01, fid) # Positive 0.01
-        gdb.write_channel(line, m_0p01_channel, ones*-0.01, fid) # Negative 0.01
-        gdb.write_channel(line, zero_channel, ones*0, fid) # Zeros
+        
+        gdb.loc[line, "p_3"] = ones*3 # Positive 3
+        gdb.loc[line, "m_3"] = ones*-3 # Negative 3
+        gdb.loc[line, "p_0p5"] = ones*0.5 # Positive 0.5
+        gdb.loc[line, "m_0p5"] = ones*-0.5 # Negative 0.5
+        gdb.loc[line, "p_0p05"] = ones*0.05 # Positive 0.05
+        gdb.loc[line, "m_0p05"] = ones*-0.05 # Negative 0.05
+        gdb.loc[line, "p_0p01"] = ones*0.01 # Positive 0.01
+        gdb.loc[line, "m_0p01"] = ones*-0.01 # Negative 0.01
+        gdb.loc[line, "zero"] = ones*0 # Zeros
 
         ################ DIURNAL QC FOR 15 SECOND CHORD #########################
         # Calculate L_magD_15
@@ -339,13 +321,13 @@ def rungx():
         L_magD_15_values = np.where(cond, DIURNAL, dummy) # Values of L_magD only every 15 seconds.
         # Calculate chrd_Lmag15
         chrd_Lmag15_values = interpolate_array(L_magD_15_values) # Interpolate between each 15 second value to produce the chord.
-        gdb.write_channel(line, chrd_Lmag15_channel, chrd_Lmag15_values, fid) # Write chord to the gdb
+        gdb.loc[line, "chrd_Lmag15"] = chrd_Lmag15_values # Write chord to the gdb
         # Calculate L_magDIFF15
         L_magDIFF15_values = DIURNAL - chrd_Lmag15_values # Calculate the difference
-        gdb.write_channel(line, L_magDIFF15_channel, L_magDIFF15_values, fid) # Write the DIFF to the gdb
+        gdb.loc[line, "L_magDIFF15"] = L_magDIFF15_values # Write the DIFF to the gdb
         OOS_15_mask = (np.abs(L_magDIFF15_values) > diurnal_15chord_OOS_threshold)
         OOS_15 = sum ( OOS_15_mask) # Number of data points for which 15 sec Diurnal chord is out-of-spec.
-        gdb.write_channel(line, diurnal_15chord_OOS_channel, OOS_15_mask.astype('int8'), fid) # Write the OOS mask to gdb
+        gdb.loc[line, "diurnal_15chord_OOS"] = OOS_15_mask.astype('int8') # Write the OOS mask to gdb
 
         ################ DIURNAL QC FOR 60 SECOND CHORD #########################
         # Calculate L_magD_60
@@ -353,13 +335,13 @@ def rungx():
         L_magD_60_values = np.where(cond, DIURNAL, dummy) # Values of L_magD only every 60 seconds.
         # Calculate chrd_Lmag60
         chrd_Lmag60_values = interpolate_array(L_magD_60_values) # Interpolate between each 60 second value to produce the chord.
-        gdb.write_channel(line, chrd_Lmag60_channel, chrd_Lmag60_values, fid) # Write chord to the gdb
+        gdb.loc[line, "chrd_Lmag60"] = chrd_Lmag60_values # Write chord to the gdb
         # Calculate L_magDIFF60
         L_magDIFF60_values = DIURNAL - chrd_Lmag60_values # Calculate the difference
-        gdb.write_channel(line, L_magDIFF60_channel, L_magDIFF60_values, fid) # Write the DIFF to the gdb
+        gdb.loc[line, "L_magDIFF60"] = L_magDIFF60_values # Write the DIFF to the gdb
         OOS_60_mask = (np.abs(L_magDIFF60_values) > diurnal_60chord_OOS_threshold) # Mask for where 60 sec diurnal is out-of-spec
         OOS_60 = sum ( OOS_60_mask) # Number of data points for which 60 sec Diurnal chord is out-of-spec. .astype('int8')
-        gdb.write_channel(line, diurnal_60chord_OOS_channel, OOS_60_mask.astype('int8'), fid) # Write the OOS mask to gdb
+        gdb.loc[line, "diurnal_60chord_OOS"] = OOS_60_mask.astype('int8') # Write the OOS mask to gdb
 
         # Record out-of-spec summary for diurnals:
         if OOS_15 > 0 or OOS_60 > 0:
@@ -367,36 +349,38 @@ def rungx():
             diurnal_summary.loc[len(diurnal_summary)] = [flight_num, line, OOS_15, OOS_60]
 
         ################ DRAPE AND SPEED QC #########################
-        gdb.write_channel(line, drape_p15_channel, SURFACE+15, fid) # Drape surface plus 15 m
-        gdb.write_channel(line, drape_m15_channel, SURFACE-15, fid) # Drape surface minus 15 m
+        gdb.loc[line, "drape_p15"] = SURFACE+15 # Drape surface plus 15 m
+        gdb.loc[line, "drape_m15"] = SURFACE-15 # Drape surface minus 15 m
         # Calculate Speed:
         # Note that in calling UTCTIME to calculate speed instead of hard-coding the data frequency that this script is agnostic/generalized 
         #           to data recorded in different Hz.
         step_distance = np.sqrt( (shift_right(EASTING) - EASTING)**2 + (shift_right(NORTHING) - NORTHING)**2 )
         speed_values = step_distance / (UTCTIME - shift_right(UTCTIME))
         drape_deviation = GPSALT - SURFACE # deviation from drape
-        gdb.write_channel(line, drape_deviation_channel, drape_deviation, fid) # Write drape deviation values to gdb.
-        gdb.write_channel(line, step_distance_channel, step_distance, fid) # Write step distance values to gdb.
-        gdb.write_channel(line, speed_channel, speed_values, fid) # Write speed values to gdb.
+        gdb.loc[line, "drape_deviation"] = drape_deviation # Write drape deviation values to gdb.
+        gdb.loc[line, "step_distance"] = step_distance # Write step distance values to gdb.
+        gdb.loc[line, "speed"] = speed_values # Write speed values to gdb.
 
         # Detect and record out-of-spec segments for drape:
         OOS_drape, OOS_drape_mask = auto_drape_analysis(flight_num, line, drape_deviation, step_distance, speed_values, FIDCOUNT) # calling function defined above
-        gdb.write_channel(line, drape_OOS_channel, OOS_drape_mask, fid) # Write the drape OOS mask to the gdb.
+        gdb.loc[line, "drape_OOS"] = OOS_drape_mask # Write the drape OOS mask to the gdb.
         if OOS_drape is not None:
             drape_summary = pd.concat([drape_summary, OOS_drape], ignore_index=True) # add OOS drape segments to summary dataframe
 
         ################ NOISE QC #########################
         MAG_4th_diff = fourth_difference(MAGCOM) # 4th difference values. Discrete. Non-normalized. Was originally calculated using #np.diff(MAGCOM, n=4)
-        gdb.write_channel(line, MAGCOM_2nd_channel, np.diff(MAGCOM, n=2), fid) # save 2nd difference to gdb
-        gdb.write_channel(line, MAGCOM_4th_channel, MAG_4th_diff, fid) # save 4th difference to gdb
+        gdb.loc[line, "MAGCOM_2nd"] = np.pad(np.diff(MAGCOM, n=2), (0, 2), constant_values=np.nan) # save 2nd difference to gdb
+        gdb.loc[line, "MAGCOM_4th"] = MAG_4th_diff # save 4th difference to gdb
         # Identify if there is OOS 4th difference on this line:
         OOS_4th_mask = (np.abs(MAG_4th_diff) > MAG_4th_diff_OOS_threshold) # Where 4th diff noise out-of-spec mask. 
         OOS_4th = sum ( OOS_4th_mask) # Number of data points for which 4th difference noise out-of-spec.
-        gdb.write_channel(line, mag_4th_diff_OOS_channel, OOS_4th_mask.astype('int8'), fid) # Write the OOS mask to gdb
+        gdb.loc[line, "mag_4th_diff_OOS"] = OOS_4th_mask.astype('int8') # Write the OOS mask to gdb
         if OOS_4th>0: # If any out of spec records.
             OOS_4th_line_count += 1 # add a line to the count!
             noise_summary.loc[len(noise_summary)] = [flight_num, line, OOS_4th] # Append the line to the noise_summary.
 
+    gdb.reset_index().to_csv(out_path_data, index=False)
+            
     ################ SAVE SUMMARY FILES #########################
     # Noise summary
     if OOS_4th_line_count > 0: # save only if any lines out-of-spec.
@@ -413,8 +397,7 @@ def rungx():
 
     sum_text = "{} lines ({} segments, {:.1f} line-km total) with drape out of spec. \n {} lines with diurnal out of spec. \n {} lines with potential noise problems. \n\n Summary files saved to {} \n\n Please move summary files to appropriate archive directory.".format(OOS_drape_line_count, OOS_drape_segment_count, OOS_drape_meters/1000, OOS_diurnal_line_count, OOS_4th_line_count, out_path)
 
-    gxapi.GXSYS.display_message("QC Calculations Complete.", sum_text)
+    print("QC Calculations Complete.", sum_text)
 
 if __name__ == "__main__":
-    gxpy.gx.GXpy()
     rungx()
