@@ -228,13 +228,7 @@ def process_all(pipeline, data,
                 diurnal_60chord_OOS_threshold = 3, # OOS threshold for diurnal 60 second chord
                 MAG_4th_diff_OOS_threshold = 0.05, # OOS threshold for MAG 4th difference. TOS specifies "Noise must be limited to 0.1 nT, peak to peak." +/-0.05 nT threshold as easy way to try to catch that.
                 ):
-    gdb = data.data
-    
-    ################## QC Summaries Prep ####################################################                
-    # Pandas dataframes for storing summary values:
-    noise_summary = pd.DataFrame(columns=['Flight', 'Line','OOS_Count'])
-    diurnal_summary = pd.DataFrame(columns=['Flight', 'Line', 'OOS_Count_15chord', 'OOS_Count_60chord'])
-    drape_summary = pd.DataFrame(columns=['Flight', 'Line', 'Fid_start','Fid_end','Length_OOS','Max_drape_dev','Avg_drape_dev','Avg_speed'])
+    gdb = data.data    
 
     ################### ADD CHANNELS ####################################################
 
@@ -270,9 +264,6 @@ def process_all(pipeline, data,
     m_0p01_channel = add_channel(gdb, "m_0p01") # Negative 0.01 (for comparison to 4th diff channel)
     zero_channel = add_channel(gdb, "zero") # Zero
 
-    # Set Counters for Lines out of spec (OOS):
-    OOS_4th_line_count = 0
-    OOS_diurnal_line_count = 0
     ################### WORK THROUGH EACH LINE: ####################################################
     for line in gdb.index.get_level_values('Line').unique():
         # Retrieve data in array format for channel math:
@@ -329,11 +320,6 @@ def process_all(pipeline, data,
         OOS_60 = sum ( OOS_60_mask) # Number of data points for which 60 sec Diurnal chord is out-of-spec. .astype('int8')
         gdb.loc[line, "diurnal_60chord_OOS"] = OOS_60_mask.astype('int8') # Write the OOS mask to gdb
 
-        # Record out-of-spec summary for diurnals:
-        if OOS_15 > 0 or OOS_60 > 0:
-            OOS_diurnal_line_count += 1 # add to the line count.
-            diurnal_summary.loc[len(diurnal_summary)] = [flight_num, line, OOS_15, OOS_60]
-
         ################ DRAPE AND SPEED QC #########################
         gdb.loc[line, "drape_p15"] = SURFACE+15 # Drape surface plus 15 m
         gdb.loc[line, "drape_m15"] = SURFACE-15 # Drape surface minus 15 m
@@ -350,8 +336,6 @@ def process_all(pipeline, data,
         # Detect and record out-of-spec segments for drape:
         OOS_drape, OOS_drape_mask = auto_drape_analysis(flight_num, line, drape_deviation, step_distance, speed_values, FIDCOUNT) # calling function defined above
         gdb.loc[line, "drape_OOS"] = OOS_drape_mask # Write the drape OOS mask to the gdb.
-        if OOS_drape is not None:
-            drape_summary = pd.concat([drape_summary, OOS_drape], ignore_index=True) # add OOS drape segments to summary dataframe
 
         ################ NOISE QC #########################
         MAG_4th_diff = fourth_difference(MAGCOM) # 4th difference values. Discrete. Non-normalized. Was originally calculated using #np.diff(MAGCOM, n=4)
@@ -361,21 +345,9 @@ def process_all(pipeline, data,
         OOS_4th_mask = (np.abs(MAG_4th_diff) > MAG_4th_diff_OOS_threshold) # Where 4th diff noise out-of-spec mask. 
         OOS_4th = sum ( OOS_4th_mask) # Number of data points for which 4th difference noise out-of-spec.
         gdb.loc[line, "mag_4th_diff_OOS"] = OOS_4th_mask.astype('int8') # Write the OOS mask to gdb
-        if OOS_4th>0: # If any out of spec records.
-            OOS_4th_line_count += 1 # add a line to the count!
-            noise_summary.loc[len(noise_summary)] = [flight_num, line, OOS_4th] # Append the line to the noise_summary.
 
     data.data = gdb
     return data
-    
-    # return (gdb,
-    #         OOS_4th_line_count,
-    #         noise_summary,
-    #         OOS_diurnal_line_count,
-    #         diurnal_summary,
-    #         drape_summary
-    #         )
-
 
 def write_noise_summary(pipeline, data, filename="OOS_4th_difference.csv"):
     # Lines with at least one data point for which 4th difference noise out-of-spec.
