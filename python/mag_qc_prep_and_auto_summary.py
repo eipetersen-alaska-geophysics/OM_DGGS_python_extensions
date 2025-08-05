@@ -3,6 +3,14 @@
 Author: Eric Petersen
 Date: 2025-06-11
 
+Copyright (C) 2025 Eric Petersen
+This program is free software: you can redistribute it and/or modify it under the terms of the 
+GNU General Public License as published by the Free Software Foundation, either version 3 of the 
+License, or (at your option) any later version. This program is distributed in the hope that it 
+will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY 
+or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details, 
+<http://www.gnu.org/licenses/>.
+
 DESCRIPTION:
 This python extension for Oasis montaj is designed to work on a geodatabase with standard
 DGGS channel naming schema. It calculates new channels necessary for QC work on production
@@ -45,7 +53,6 @@ After running this extension, DGGS QC dbviews can then be loaded for continuing 
     error in manual QC work.
 
 POTENTIAL FUTURE WORK/UPDATES:
-    - Implement low pass / high pass filter, including user inputs.
     - Implement new magHFnoise_v2.2 filter from GSC.
     - Implement user input for .gdb to run extension on (maybe not necessary).
     - Implement user input for location to output auto summary files (maybe not necessary).

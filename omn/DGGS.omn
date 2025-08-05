@@ -2,5 +2,7 @@
 /------------------------------------------------------------------------------
  
 MENU "DGGS"
+ITEM "Select Lines Through Flight Number..."   ,line_selector_thru_flight_number.py
 ITEM "Deselect Lines Through Flight Number..."   ,line_deselector_thru_flight_number.py
 ITEM "Magnetic QC Calculations and Auto Summary..."  ,mag_qc_prep_and_auto_summary.py
+ITEM "EM Flight Height QC and Auto Summary..."  ,EM_qc_prep_and_auto_summary.py

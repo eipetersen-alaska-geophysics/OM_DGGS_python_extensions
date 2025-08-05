@@ -1,7 +1,7 @@
-################## LINE DESELECTOR ####################################################
+################## LINE SELECTOR ####################################################
 """
 Author: Eric Petersen
-Date: 2025-06-11
+Date: 2025-06-24
 
 Copyright (C) 2025 Eric Petersen
 This program is free software: you can redistribute it and/or modify it under the terms of the 
@@ -12,26 +12,8 @@ or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
 <http://www.gnu.org/licenses/>.
 
 DESCRIPTION:
-Deselect lines in open geodatabase through user input of the flight # through which to
-deselect lines.
-
-##################### UPDATE 2025-06-23 by Eric Petersen ##################### 
-Based off feedback from Phuong Vo (Geological Society of Canada):
------------------------------------------------------------------
-"I had to add the following lines 
-
-import numpy as np           
-if not hasattr(np, 'float'): 
-    np.float = float         
-if not hasattr(np, 'int'):   
-    np.int = int
-
-at the beginning of the script to be compatible with newer NumPy versions (v1.20+), 
-where np.float and np.int are deprecated or removed. This compatibility patch prevents 
-crashes if legacy code or libraries still try to use those names.  Eric’s python script 
-does not include this patch, so if it (or any of its dependencies) tries to use np.float 
-or np.int while running under version(s) NumPy 1.20 or newer, it may crash with an 
-AttributeError."
+Select lines in open geodatabase through user input of the flight # through which to
+select lines. Modified from the line_deselector tool.
 -----------------------------------------------------------------
 """
 
@@ -59,9 +41,10 @@ def rungx():
         return
     
     # Get user input on flights to exclude:
-    max_flt_ex = gxproj.get_user_input(title='Deselect Survey Lines From Flight 1 Through Flight #',
-                                    prompt ='Flight #:',
-                                    kind='int')
+    max_flt_ex = gxproj.get_user_input(title='Select Survey Lines From Flight 1 Through Flight #',
+                                    prompt ='Flight #',
+                                    kind='int',
+                                    items=['Start','End'])
 
     ################### WORK THROUGH EACH LINE: ####################################################
     for line in gdb.list_lines():
@@ -69,7 +52,7 @@ def rungx():
         FLIGHT, fid = gdb.read_channel(line, 'FLIGHT')
         flight_num = FLIGHT[0]
         if flight_num <= max_flt_ex: # See if it's within the flights you want to exclude.
-            gdb.select_lines(line, select=False)
+            gdb.select_lines(line, select=True)
     
-    gxapi.GXSYS.display_message("Lines Deselected!","Done.")
+    gxapi.GXSYS.display_message("Lines Selected!","Done.")
 
