@@ -223,11 +223,13 @@ def auto_drape_analysis(flight, line, drape_deviance, step_dist, speed, fid, zto
         return None, OOS_drape_mask
 
 
-def process_all(gdb, 
+def process_all(pipeline, data, 
                 diurnal_15chord_OOS_threshold = 0.5, # OOS threshold for diurnal 15 second chord
                 diurnal_60chord_OOS_threshold = 3, # OOS threshold for diurnal 60 second chord
                 MAG_4th_diff_OOS_threshold = 0.05, # OOS threshold for MAG 4th difference. TOS specifies "Noise must be limited to 0.1 nT, peak to peak." +/-0.05 nT threshold as easy way to try to catch that.
                 ):
+    gdb = data.data
+    
     ################## QC Summaries Prep ####################################################                
     # Pandas dataframes for storing summary values:
     noise_summary = pd.DataFrame(columns=['Flight', 'Line','OOS_Count'])
@@ -362,60 +364,14 @@ def process_all(gdb,
         if OOS_4th>0: # If any out of spec records.
             OOS_4th_line_count += 1 # add a line to the count!
             noise_summary.loc[len(noise_summary)] = [flight_num, line, OOS_4th] # Append the line to the noise_summary.
-                
-    return (gdb,
-            OOS_4th_line_count,
-            noise_summary,
-            OOS_diurnal_line_count,
-            diurnal_summary,
-            drape_summary
-            )
-            
-################## ACTUAL SCRIPT THAT RUNS IN OM MENU ####################################################
-@click.command()
-@click.argument('in_path', type=click.Path(exists=True))
-@click.argument('out_path', type=click.Path(), default=".")
-@click.option('--verbose', is_flag=True, help='Enable verbose output.')
-def rungx(in_path, out_path, verbose):
-    gdb = pd.read_csv(in_path).set_index(["Line", "FIDCOUNT"])
+
+    data.data = gdb
+    return data
     
-    ################## QC Summaries Prep ####################################################
-    # Out path for QC Summaries
-    if out_path:
-        os.makedirs(out_path, exist_ok=True)
-    # Prep output file paths
-    out_path_data = out_path + '/data.csv'
-    out_path_noise = out_path + '/OOS_4th_difference.csv'
-    out_path_diurnal = out_path + '/OOS_diurnal.csv'
-    out_path_drape = out_path + '/OOS_drape.csv'
-
-    (gdb,
-     OOS_4th_line_count,
-     noise_summary,
-     OOS_diurnal_line_count,
-     diurnal_summary,
-     drape_summary
-     ) = process_all(gdb)
-
-    gdb.reset_index().to_csv(out_path_data, index=False)
-            
-    ################ SAVE SUMMARY FILES #########################
-    # Noise summary
-    if OOS_4th_line_count > 0: # save only if any lines out-of-spec.
-        noise_summary.to_csv(out_path_noise, index=False)
-    # Diurnal summary
-    if OOS_diurnal_line_count > 0: # save only if any lines out-of-spec.
-        diurnal_summary.to_csv(out_path_diurnal, index=False)
-    # Drape summary
-    OOS_drape_segment_count = len(drape_summary)
-    OOS_drape_line_count = len(drape_summary['Line'].unique())
-    OOS_drape_meters = np.sum(drape_summary['Length_OOS'])
-    if OOS_drape_segment_count > 0:
-        drape_summary.to_csv(out_path_drape, float_format="%.0f", index=False)
-
-    sum_text = "{} lines ({} segments, {:.1f} line-km total) with drape out of spec. \n {} lines with diurnal out of spec. \n {} lines with potential noise problems. \n\n Summary files saved to {} \n\n Please move summary files to appropriate archive directory.".format(OOS_drape_line_count, OOS_drape_segment_count, OOS_drape_meters/1000, OOS_diurnal_line_count, OOS_4th_line_count, out_path)
-
-    print("QC Calculations Complete.", sum_text)
-
-if __name__ == "__main__":
-    rungx()
+    # return (gdb,
+    #         OOS_4th_line_count,
+    #         noise_summary,
+    #         OOS_diurnal_line_count,
+    #         diurnal_summary,
+    #         drape_summary
+    #         )
