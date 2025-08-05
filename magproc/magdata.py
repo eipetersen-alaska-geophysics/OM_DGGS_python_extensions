@@ -15,7 +15,7 @@ class MagData:
         self.meta = meta
 
     @classmethod
-    def load(cls, path: str):
+    def load(cls, path: str, **kws):
         """Load mag data from file. Filename should end in .mag.zip or .csv"""
         if path.endswith(".csv"):
             with open(path) as f:
@@ -28,6 +28,7 @@ class MagData:
                 with z.open("meta.yaml") as f:
                     meta = yaml.safe_load(f)
         meta["filename"] = os.path.split(path)[-1]
+        meta.update(kws)
         return cls(df.set_index(["Line", "FIDCOUNT"]), **meta)
 
     def save(self, path: str):
@@ -43,26 +44,71 @@ class MagData:
 
         {self.data.describe().T.to_string()}"""
 
-
-    def plot(self, zoom=12, max_points=5000, **kw):
+    def plot_map(self, zoom=12, max_points=5000, **kw):
         """Plot data with contextily basemap. Assumes Easting/Northing in self.meta['crs']."""
         crs = self.meta.get('crs', None)
 
-        plot_data = self.data.sample(n=min(len(self.data), max_points), random_state=42)
-
         gdf = gpd.GeoDataFrame(
-            plot_data,
-            geometry=gpd.points_from_xy(plot_data.Easting, plot_data.Northing),
-            crs=crs or 3857)
+            self.data.copy(),
+            geometry=gpd.points_from_xy(self.data.Easting, self.data.Northing),
+            crs=crs or 3857
+        )
+
         if crs is not None:
             gdf = gdf.to_crs(epsg=3857)
 
-        ax = gdf.plot(**kw)
 
+        if "ax" in kw:
+            ax = kw["ax"]
+            xlim = ax.get_xlim()
+            ylim = ax.get_ylim()
+        else:
+            # Get full bounds of the data (to estimate center)
+            xmin, ymin, xmax, ymax = gdf.total_bounds
+            x_center = (xmin + xmax) / 2
+            y_center = (ymin + ymax) / 2
+            tile_size = 40075016.68557849 / (2 ** zoom)  # world extent / 2^zoom
+            half_size = tile_size / 2
+
+            xlim = (x_center - half_size, x_center + half_size)
+            ylim = (y_center - half_size, y_center + half_size)
+
+        gdf = gdf.cx[xlim[0]:xlim[1], ylim[0]:ylim[1]]
+        gdf = gdf.sample(n=min(len(gdf), max_points), random_state=42)
+
+        ax = gdf.plot(**kw)
         ctx.add_basemap(ax, source=ctx.providers.CartoDB.Positron, zoom=zoom)
         ax.set_title(f"Mag Data: {self.meta.get('filename', '')}")
         ax.set_axis_off()
+
         if "ax" not in kw:
             plt.tight_layout()
             plt.show()
+
         return ax
+
+    def plot(self):
+        for line in self.data.index.get_level_values('Line').unique():
+            linedata = self.data.loc[line]
+
+            fig, ax1 = plt.subplots()
+
+            # Primary y-axis
+            ax1.plot(linedata.index, linedata.MAGCOM, c="red", label="MAGCOM")
+            ax1.plot(linedata.index, linedata.Diurnal, c="green", label="Diurnal")
+            ax1.set_ylabel("MAGCOM / Diurnal")
+            ax1.tick_params(axis='y')
+
+            # Secondary y-axis
+            ax2 = ax1.twinx()
+            ax2.plot(linedata.index, linedata.MAGCOM - linedata.Diurnal, c="blue", label="Residual (MAGCOM - Diurnal)")
+            ax2.set_ylabel("Residual")
+            ax2.tick_params(axis='y')
+
+            # Optional: Combine legends from both axes
+            lines_1, labels_1 = ax1.get_legend_handles_labels()
+            lines_2, labels_2 = ax2.get_legend_handles_labels()
+            ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc="upper right")
+
+            plt.title(f"Line: {line}")
+            plt.show()
