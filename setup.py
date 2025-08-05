@@ -14,7 +14,7 @@ setup(
             'magproc=magproc.pipeline:main',
         ],
         'mag_pipeline.filters': [
-            'all = magproc.magfilters:process_all',
+            'set_constants = magproc.magfilters:set_constants',
             'diurnal_qc_for_15s_chord = magproc.magfilters:diurnal_qc_for_15s_chord',
             'diurnal_qc_for_60s_chord = magproc.magfilters:diurnal_qc_for_60s_chord',
             'drape_and_speed_qc = magproc.magfilters:drape_and_speed_qc',

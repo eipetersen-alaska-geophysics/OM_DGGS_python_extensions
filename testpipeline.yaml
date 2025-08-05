@@ -1,5 +1,5 @@
 steps:
- - all
+ - set_constants
  - diurnal_qc_for_15s_chord
  - diurnal_qc_for_60s_chord
  - drape_and_speed_qc

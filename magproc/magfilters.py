@@ -223,35 +223,8 @@ def auto_drape_analysis(flight, line, drape_deviance, step_dist, speed, fid, zto
         return None, OOS_drape_mask
 
 
-def process_all(pipeline, data, 
-                diurnal_15chord_OOS_threshold = 0.5, # OOS threshold for diurnal 15 second chord
-                diurnal_60chord_OOS_threshold = 3, # OOS threshold for diurnal 60 second chord
-                MAG_4th_diff_OOS_threshold = 0.05, # OOS threshold for MAG 4th difference. TOS specifies "Noise must be limited to 0.1 nT, peak to peak." +/-0.05 nT threshold as easy way to try to catch that.
-                ):
+def set_constants(pipeline, data):
     gdb = data.data    
-
-    ################### ADD CHANNELS ####################################################
-
-    # Diurnal Chord Analysis:
-    chrd_Lmag15_channel = add_channel(gdb, "chrd_Lmag15")
-    chrd_Lmag60_channel = add_channel(gdb, "chrd_LmagD60")
-    L_magDIFF15_channel = add_channel(gdb, "L_magDIFF15")
-    L_magDIFF60_channel = add_channel(gdb, "L_magDIFF60")
-    diurnal_15chord_OOS_channel = add_channel(gdb, "diurnal_15chord_OOS_mask", dtype='int8') # Diurnal 15 second chord out-of-spec mask
-    diurnal_60chord_OOS_channel = add_channel(gdb, "diurnal_60chord_OOS_mask", dtype='int8') # Diurnal 60 second chord out-of-spec mask
-
-    # Speed and Drape Analysis:
-    drape_p15_channel = add_channel(gdb, "drape_p15") # Drape plus 15 m
-    drape_m15_channel = add_channel(gdb, "drape_m15") # Drape minus 15 m
-    speed_channel = add_channel(gdb, "speed") # Speed
-    step_distance_channel = add_channel(gdb, "step_distance") # Step distance
-    drape_deviation_channel = add_channel(gdb, "drape_deviation") # Flight altitude deviation from drape.
-    drape_OOS_channel = add_channel(gdb, "drape_OOS_mask", dtype='int8') # Drape out-of-spec mask
-
-    # Noise channels:
-    MAGCOM_2nd_channel = add_channel(gdb, "MAGCOM_2nd") # 2nd difference
-    MAGCOM_4th_channel = add_channel(gdb, "MAGCOM_4th") # 4th difference
-    mag_4th_diff_OOS_channel = add_channel(gdb, "mag_4th_diff_OOS_mask", dtype='int8') # 4th difference out-of-spec mask
 
     # Constant Value Channels:
     p_3_channel = add_channel(gdb, "p_3") # Positive 3.0 (for comparison to 60 second chord)
@@ -264,38 +237,27 @@ def process_all(pipeline, data,
     m_0p01_channel = add_channel(gdb, "m_0p01") # Negative 0.01 (for comparison to 4th diff channel)
     zero_channel = add_channel(gdb, "zero") # Zero
 
-    ################### WORK THROUGH EACH LINE: ####################################################
-    for line in gdb.index.get_level_values('Line').unique():
-        # Retrieve data in array format for channel math:
-        UTCTIME = gdb.loc[line, 'UTCTIME'].values
-        DIURNAL = gdb.loc[line, 'Diurnal'].values
-        EASTING = gdb.loc[line, 'Easting'].values
-        NORTHING = gdb.loc[line, 'Northing'].values
-        SURFACE = gdb.loc[line, 'Surface'].values
-        MAGCOM = gdb.loc[line, 'MAGCOM'].values
-        GPSALT = gdb.loc[line, 'GPSALT'].values
-        FLIGHT = gdb.loc[line, 'Flight'].values
-        FIDCOUNT = gdb.loc[line].index.get_level_values('FIDCOUNT').values
-        flight_num = FLIGHT[0]
+    DIURNAL = gdb['Diurnal'].values
+    dummy = np.full_like(DIURNAL, np.nan, dtype=float) # To be used for infilling with dummy values.
+    ones = np.full_like(DIURNAL, 1, dtype=float) # To be used for infilling with constant values.
 
-        ################ CONSTANT VALUE ARRAYS AND CHANNELS FOR PLOTTING/ANALYSIS #########################
-        dummy = np.full_like(DIURNAL, np.nan, dtype=float) # To be used for infilling with dummy values.
-        ones = np.full_like(DIURNAL, 1, dtype=float) # To be used for infilling with constant values.
-        
-        gdb.loc[line, "p_3"] = ones*3 # Positive 3
-        gdb.loc[line, "m_3"] = ones*-3 # Negative 3
-        gdb.loc[line, "p_0p5"] = ones*0.5 # Positive 0.5
-        gdb.loc[line, "m_0p5"] = ones*-0.5 # Negative 0.5
-        gdb.loc[line, "p_0p05"] = ones*0.05 # Positive 0.05
-        gdb.loc[line, "m_0p05"] = ones*-0.05 # Negative 0.05
-        gdb.loc[line, "p_0p01"] = ones*0.01 # Positive 0.01
-        gdb.loc[line, "m_0p01"] = ones*-0.01 # Negative 0.01
-        gdb.loc[line, "zero"] = ones*0 # Zeros
+    gdb["p_3"] = ones*3 # Positive 3
+    gdb["m_3"] = ones*-3 # Negative 3
+    gdb["p_0p5"] = ones*0.5 # Positive 0.5
+    gdb["m_0p5"] = ones*-0.5 # Negative 0.5
+    gdb["p_0p05"] = ones*0.05 # Positive 0.05
+    gdb["m_0p05"] = ones*-0.05 # Negative 0.05
+    gdb["p_0p01"] = ones*0.01 # Positive 0.01
+    gdb["m_0p01"] = ones*-0.01 # Negative 0.01
+    gdb["zero"] = ones*0 # Zeros
 
 def diurnal_qc_for_15s_chord(pipeline, data,
                              diurnal_15chord_OOS_threshold = 0.5):
     """OOS threshold for diurnal 15 second chord"""
     gdb = data.data
+    diurnal_15chord_OOS_channel = add_channel(gdb, "diurnal_15chord_OOS_mask", dtype='int8') # KEPT FOR COMPATIBILITY. Diurnal 15 second chord out-of-spec mask
+    chrd_Lmag15_channel = add_channel(gdb, "chrd_Lmag15")
+    L_magDIFF15_channel = add_channel(gdb, "L_magDIFF15")
     for line in gdb.index.get_level_values('Line').unique():
         UTCTIME = gdb.loc[line, 'UTCTIME'].values
         DIURNAL = gdb.loc[line, 'Diurnal'].values
@@ -318,6 +280,9 @@ def diurnal_qc_for_60s_chord(pipeline, data,
                              diurnal_60chord_OOS_threshold = 3):
     """ # OOS threshold for diurnal 60 second chord"""
     gdb = data.data
+    diurnal_60chord_OOS_channel = add_channel(gdb, "diurnal_60chord_OOS_mask", dtype='int8') # KEPT FOR COMPATIBILITY. Diurnal 60 second chord out-of-spec mask
+    chrd_Lmag60_channel = add_channel(gdb, "chrd_LmagD60")
+    L_magDIFF60_channel = add_channel(gdb, "L_magDIFF60")
     for line in gdb.index.get_level_values('Line').unique():
         UTCTIME = gdb.loc[line, 'UTCTIME'].values
         DIURNAL = gdb.loc[line, 'Diurnal'].values
@@ -343,6 +308,12 @@ def drape_and_speed_qc(pipeline, data):
     to data recorded in different Hz.
     """
     gdb = data.data    
+    drape_p15_channel = add_channel(gdb, "drape_p15") # Drape plus 15 m
+    drape_m15_channel = add_channel(gdb, "drape_m15") # Drape minus 15 m
+    speed_channel = add_channel(gdb, "speed") # Speed
+    step_distance_channel = add_channel(gdb, "step_distance") # Step distance
+    drape_deviation_channel = add_channel(gdb, "drape_deviation") # Flight altitude deviation from drape.
+    drape_OOS_channel = add_channel(gdb, "drape_OOS_mask", dtype='int8') # KEPT FOR COMPATIBILITY. Drape out-of-spec mask
     for line in gdb.index.get_level_values('Line').unique():
         FLIGHT = gdb.loc[line, 'Flight'].values
         UTCTIME = gdb.loc[line, 'UTCTIME'].values
@@ -374,6 +345,9 @@ def noice_qc(pipeline, data,
     way to try to catch that."""
     
     gdb = data.data    
+    MAGCOM_2nd_channel = add_channel(gdb, "MAGCOM_2nd") # 2nd difference
+    MAGCOM_4th_channel = add_channel(gdb, "MAGCOM_4th") # 4th difference
+    mag_4th_diff_OOS_channel = add_channel(gdb, "mag_4th_diff_OOS_mask", dtype='int8') # KEPT FOR COMPATIBILITY. 4th difference out-of-spec mask
     for line in gdb.index.get_level_values('Line').unique():
         MAGCOM = gdb.loc[line, 'MAGCOM'].values        
         MAG_4th_diff = fourth_difference(MAGCOM) # 4th difference values. Discrete. Non-normalized. Was originally calculated using #np.diff(MAGCOM, n=4)
