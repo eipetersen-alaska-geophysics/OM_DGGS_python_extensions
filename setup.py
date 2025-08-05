@@ -15,9 +15,13 @@ setup(
         ],
         'mag_pipeline.filters': [
             'all = magproc.magfilters:process_all',
+            'diurnal_qc_for_15s_chord = magproc.magfilters:diurnal_qc_for_15s_chord',
+            'diurnal_qc_for_60s_chord = magproc.magfilters:diurnal_qc_for_60s_chord',
+            'drape_and_speed_qc = magproc.magfilters:drape_and_speed_qc',
+            'noice_qc = magproc.magfilters:noice_qc',
             'write_noise_summary = magproc.magfilters:write_noise_summary',
             'write_diurnal_summary = magproc.magfilters:write_diurnal_summary',
-            'write_drape_summary = magproc.magfilters:write_drape_summary',
+            'write_drape_summary = magproc.magfilters:write_drape_summary',            
         ],        
     },
 )

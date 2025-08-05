@@ -20,7 +20,11 @@ class MagPipeline:
         
     def run(self, data: MagData):
         for idx, step in enumerate(self.pipeline["steps"]):
-            step_name, kwargs = next(iter(step.items()))
+            if isinstance(step, str):
+                step_name = step
+                kwargs = {}
+            else:
+                step_name, kwargs = next(iter(step.items()))
             print(f"Running step {idx}: {step_name} with args {kwargs}")
             try:
                 func = filters[step_name]

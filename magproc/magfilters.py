@@ -292,7 +292,15 @@ def process_all(pipeline, data,
         gdb.loc[line, "m_0p01"] = ones*-0.01 # Negative 0.01
         gdb.loc[line, "zero"] = ones*0 # Zeros
 
-        ################ DIURNAL QC FOR 15 SECOND CHORD #########################
+def diurnal_qc_for_15s_chord(pipeline, data,
+                             diurnal_15chord_OOS_threshold = 0.5):
+    """OOS threshold for diurnal 15 second chord"""
+    gdb = data.data
+    for line in gdb.index.get_level_values('Line').unique():
+        UTCTIME = gdb.loc[line, 'UTCTIME'].values
+        DIURNAL = gdb.loc[line, 'Diurnal'].values
+        dummy = np.full_like(DIURNAL, np.nan, dtype=float) # To be used for infilling with dummy values.
+
         # Calculate L_magD_15
         cond = (np.floor(UTCTIME / 15 ) * 15 ) == (np.floor(UTCTIME * 10)/10)
         L_magD_15_values = np.where(cond, DIURNAL, dummy) # Values of L_magD only every 15 seconds.
@@ -306,7 +314,15 @@ def process_all(pipeline, data,
         OOS_15 = sum ( OOS_15_mask) # Number of data points for which 15 sec Diurnal chord is out-of-spec.
         gdb.loc[line, "diurnal_15chord_OOS"] = OOS_15_mask.astype('int8') # Write the OOS mask to gdb
 
-        ################ DIURNAL QC FOR 60 SECOND CHORD #########################
+def diurnal_qc_for_60s_chord(pipeline, data,
+                             diurnal_60chord_OOS_threshold = 3):
+    """ # OOS threshold for diurnal 60 second chord"""
+    gdb = data.data
+    for line in gdb.index.get_level_values('Line').unique():
+        UTCTIME = gdb.loc[line, 'UTCTIME'].values
+        DIURNAL = gdb.loc[line, 'Diurnal'].values
+        dummy = np.full_like(DIURNAL, np.nan, dtype=float) # To be used for infilling with dummy values.
+        
         # Calculate L_magD_60
         cond = (np.floor(UTCTIME / 60 ) * 60 ) == (np.floor(UTCTIME * 10)/10)
         L_magD_60_values = np.where(cond, DIURNAL, dummy) # Values of L_magD only every 60 seconds.
@@ -317,15 +333,28 @@ def process_all(pipeline, data,
         L_magDIFF60_values = DIURNAL - chrd_Lmag60_values # Calculate the difference
         gdb.loc[line, "L_magDIFF60"] = L_magDIFF60_values # Write the DIFF to the gdb
         OOS_60_mask = (np.abs(L_magDIFF60_values) > diurnal_60chord_OOS_threshold) # Mask for where 60 sec diurnal is out-of-spec
-        OOS_60 = sum ( OOS_60_mask) # Number of data points for which 60 sec Diurnal chord is out-of-spec. .astype('int8')
+        OOS_60 = sum ( OOS_60_mask) # Number of data points for which 60 sec Diurnal chord is out-of-spec.
         gdb.loc[line, "diurnal_60chord_OOS"] = OOS_60_mask.astype('int8') # Write the OOS mask to gdb
 
-        ################ DRAPE AND SPEED QC #########################
+def drape_and_speed_qc(pipeline, data):
+    """
+    Calculate Speed:
+    Note that in calling UTCTIME to calculate speed instead of hard-coding the data frequency that this script is agnostic/generalized 
+    to data recorded in different Hz.
+    """
+    gdb = data.data    
+    for line in gdb.index.get_level_values('Line').unique():
+        FLIGHT = gdb.loc[line, 'Flight'].values
+        UTCTIME = gdb.loc[line, 'UTCTIME'].values
+        EASTING = gdb.loc[line, 'Easting'].values
+        NORTHING = gdb.loc[line, 'Northing'].values
+        SURFACE = gdb.loc[line, 'Surface'].values
+        GPSALT = gdb.loc[line, 'GPSALT'].values
+        FIDCOUNT = gdb.loc[line].index.get_level_values('FIDCOUNT').values
+        flight_num = FLIGHT[0]
+        
         gdb.loc[line, "drape_p15"] = SURFACE+15 # Drape surface plus 15 m
         gdb.loc[line, "drape_m15"] = SURFACE-15 # Drape surface minus 15 m
-        # Calculate Speed:
-        # Note that in calling UTCTIME to calculate speed instead of hard-coding the data frequency that this script is agnostic/generalized 
-        #           to data recorded in different Hz.
         step_distance = np.sqrt( (shift_right(EASTING) - EASTING)**2 + (shift_right(NORTHING) - NORTHING)**2 )
         speed_values = step_distance / (UTCTIME - shift_right(UTCTIME))
         drape_deviation = GPSALT - SURFACE # deviation from drape
@@ -337,7 +366,16 @@ def process_all(pipeline, data,
         OOS_drape, OOS_drape_mask = auto_drape_analysis(flight_num, line, drape_deviation, step_distance, speed_values, FIDCOUNT) # calling function defined above
         gdb.loc[line, "drape_OOS"] = OOS_drape_mask # Write the drape OOS mask to the gdb.
 
-        ################ NOISE QC #########################
+def noice_qc(pipeline, data,
+             MAG_4th_diff_OOS_threshold = 0.05,
+             ):
+    """OOS threshold for MAG 4th difference. TOS specifies "Noise must
+    be limited to 0.1 nT, peak to peak." +/-0.05 nT threshold as easy
+    way to try to catch that."""
+    
+    gdb = data.data    
+    for line in gdb.index.get_level_values('Line').unique():
+        MAGCOM = gdb.loc[line, 'MAGCOM'].values        
         MAG_4th_diff = fourth_difference(MAGCOM) # 4th difference values. Discrete. Non-normalized. Was originally calculated using #np.diff(MAGCOM, n=4)
         gdb.loc[line, "MAGCOM_2nd"] = np.pad(np.diff(MAGCOM, n=2), (0, 2), constant_values=np.nan) # save 2nd difference to gdb
         gdb.loc[line, "MAGCOM_4th"] = MAG_4th_diff # save 4th difference to gdb

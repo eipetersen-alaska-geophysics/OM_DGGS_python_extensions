@@ -29,7 +29,7 @@ class MagData:
         """Save mag data to file. Filename should end in .mag.zip"""
         with zipfile.ZipFile(path, 'w') as z:
             csv_buffer = StringIO()
-            self.data.reset_index(drop=True).to_csv(csv_buffer, index=False)
+            self.data.reset_index().to_csv(csv_buffer, index=False)
             z.writestr("data.csv", csv_buffer.getvalue())
             z.writestr("meta.yaml", yaml.dump(self.meta))
 
