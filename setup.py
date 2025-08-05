@@ -8,6 +8,9 @@ setup(
         "pandas",
         "numpy",
         "click",
+        "geopandas",
+        "contextily",
+        "pyproj"
     ],
     entry_points={
         'console_scripts': [
