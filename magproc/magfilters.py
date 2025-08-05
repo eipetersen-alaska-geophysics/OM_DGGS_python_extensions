@@ -375,3 +375,67 @@ def process_all(pipeline, data,
     #         diurnal_summary,
     #         drape_summary
     #         )
+
+
+def write_noise_summary(pipeline, data, filename="OOS_4th_difference.csv"):
+    # Lines with at least one data point for which 4th difference noise out-of-spec.
+    gdb = data.data
+    out_path_noise = f'{pipeline.pipeline["out_path"]}/{filename}'
+    noise_summary = pd.DataFrame(columns=['Flight', 'Line','OOS_Count'])
+    for line in gdb.index.get_level_values('Line').unique():
+        FLIGHT = gdb.loc[line, 'Flight'].values
+        flight_num = FLIGHT[0]
+        OOS_4th_mask = gdb.loc[line, "mag_4th_diff_OOS"]
+        OOS_4th = sum(OOS_4th_mask)
+        if OOS_4th > 0:
+            noise_summary.loc[len(noise_summary)] = [flight_num, line, OOS_4th]
+    if len(noise_summary) > 0: # save only if any lines out-of-spec.
+        noise_summary.to_csv(out_path_noise, index=False)
+        
+def write_diurnal_summary(pipeline, data, filename="OOS_diurnal.csv"):
+    # Lines with at least one data point for which 15 sec or 60 sec Diurnal chord is out-of-spec
+    gdb = data.data
+    out_path_diurnal = f'{pipeline.pipeline["out_path"]}/{filename}'
+    diurnal_summary = pd.DataFrame(columns=['Flight', 'Line', 'OOS_Count_15chord', 'OOS_Count_60chord'])
+    for line in gdb.index.get_level_values('Line').unique(): 
+        FLIGHT = gdb.loc[line, 'Flight'].values
+        flight_num = FLIGHT[0]
+        OOS_15_mask = gdb.loc[line, "diurnal_15chord_OOS"]
+        OOS_15 = sum(OOS_15_mask)
+        OOS_60_mask = gdb.loc[line, "diurnal_60chord_OOS"]
+        OOS_60 = sum(OOS_60_mask)
+        if OOS_15 > 0 or OOS_60 > 0:
+            diurnal_summary.loc[len(diurnal_summary)] = [flight_num, line, OOS_15, OOS_60]        
+    if len(diurnal_summary) > 0: # save only if any lines out-of-spec.
+        diurnal_summary.to_csv(out_path_diurnal, index=False)
+
+def write_drape_summary(pipeline, data, filename="OOS_drape.csv"):
+    # Lines with at least one data point for which 4th difference noise out-of-spec.
+    gdb = data.data
+    out_path_drape = f'{pipeline.pipeline["out_path"]}/{filename}'
+    drape_summary = pd.DataFrame(columns=['Flight', 'Line', 'Fid_start','Fid_end','Length_OOS','Max_drape_dev','Avg_drape_dev','Avg_speed'])
+    for line in gdb.index.get_level_values('Line').unique():
+        FLIGHT = gdb.loc[line, 'Flight'].values
+        FIDCOUNT = gdb.loc[line].index.get_level_values('FIDCOUNT').values
+        flight_num = FLIGHT[0]
+
+        drape_deviation = gdb.loc[line, "drape_deviation"].values
+        step_distance = gdb.loc[line, "step_distance"].values
+        speed_values = gdb.loc[line, "speed"].values
+
+        # Detect and record out-of-spec segments for drape:
+        OOS_drape, OOS_drape_mask = auto_drape_analysis(flight_num, line, drape_deviation, step_distance, speed_values, FIDCOUNT) # calling function defined above
+        gdb.loc[line, "drape_OOS"] = OOS_drape_mask # Write the drape OOS mask to the gdb.
+        if OOS_drape is not None:
+            drape_summary = pd.concat([drape_summary, OOS_drape], ignore_index=True) # add OOS drape segments to summary dataframe
+
+    OOS_drape_segment_count = len(drape_summary)
+    OOS_drape_line_count = len(drape_summary['Line'].unique())
+    OOS_drape_meters = np.sum(drape_summary['Length_OOS'])
+    if OOS_drape_segment_count > 0:
+        drape_summary.to_csv(out_path_drape, float_format="%.0f", index=False)
+
+    # sum_text = "{} lines ({} segments, {:.1f} line-km total) with drape out of spec. \n {} lines with diurnal out of spec. \n {} lines with potential noise problems. \n\n Summary files saved to {} \n\n Please move summary files to appropriate archive directory.".format(
+    #     OOS_drape_line_count, OOS_drape_segment_count, OOS_drape_meters/1000, OOS_diurnal_line_count, OOS_4th_line_count, out_path)
+
+    # print("QC Calculations Complete.", sum_text)

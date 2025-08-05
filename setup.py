@@ -15,6 +15,9 @@ setup(
         ],
         'mag_pipeline.filters': [
             'all = magproc.magfilters:process_all',
+            'write_noise_summary = magproc.magfilters:write_noise_summary',
+            'write_diurnal_summary = magproc.magfilters:write_diurnal_summary',
+            'write_drape_summary = magproc.magfilters:write_drape_summary',
         ],        
     },
 )

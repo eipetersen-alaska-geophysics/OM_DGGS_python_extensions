@@ -1,2 +1,5 @@
 steps:
-        - all: {}
+ - all: {}
+ - write_noise_summary: {}
+ - write_diurnal_summary: {}
+ - write_drape_summary: {}

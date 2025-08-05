@@ -26,7 +26,9 @@ class MagPipeline:
                 func = filters[step_name]
             except:
                 raise NameError(f"Unknown mag filter {step_name}.")
-            data = func(self, data, **(kwargs or {}))
+            new_data = func(self, data, **(kwargs or {}))
+            if new_data is not None:
+                data = new_data
         return data
 
     def __repr__(self):
