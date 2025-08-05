@@ -222,33 +222,17 @@ def auto_drape_analysis(flight, line, drape_deviance, step_dist, speed, fid, zto
     else:
         return None, OOS_drape_mask
 
-################## ACTUAL SCRIPT THAT RUNS IN OM MENU ####################################################
-@click.command()
-@click.argument('in_path', type=click.Path(exists=True))
-@click.argument('out_path', type=click.Path(), default=".")
-@click.option('--verbose', is_flag=True, help='Enable verbose output.')
-def rungx(in_path, out_path, verbose):
-    ################## Constants ####################################################
-    diurnal_15chord_OOS_threshold = 0.5 # OOS threshold for diurnal 15 second chord
-    diurnal_60chord_OOS_threshold = 3 # OOS threshold for diurnal 60 second chord
-    MAG_4th_diff_OOS_threshold = 0.05 # OOS threshold for MAG 4th difference. TOS specifies "Noise must be limited to 0.1 nT, peak to peak." +/-0.05 nT threshold as easy way to try to catch that.
 
-    ################## QC Summaries Prep ####################################################
-    # Out path for QC Summaries
-    if out_path:
-        os.makedirs(out_path, exist_ok=True)
-    # Prep output file paths
-    out_path_data = out_path + '/data.csv'
-    out_path_noise = out_path + '/OOS_4th_difference.csv'
-    out_path_diurnal = out_path + '/OOS_diurnal.csv'
-    out_path_drape = out_path + '/OOS_drape.csv'
+def process_all(gdb, 
+                diurnal_15chord_OOS_threshold = 0.5, # OOS threshold for diurnal 15 second chord
+                diurnal_60chord_OOS_threshold = 3, # OOS threshold for diurnal 60 second chord
+                MAG_4th_diff_OOS_threshold = 0.05, # OOS threshold for MAG 4th difference. TOS specifies "Noise must be limited to 0.1 nT, peak to peak." +/-0.05 nT threshold as easy way to try to catch that.
+                ):
+    ################## QC Summaries Prep ####################################################                
     # Pandas dataframes for storing summary values:
     noise_summary = pd.DataFrame(columns=['Flight', 'Line','OOS_Count'])
     diurnal_summary = pd.DataFrame(columns=['Flight', 'Line', 'OOS_Count_15chord', 'OOS_Count_60chord'])
     drape_summary = pd.DataFrame(columns=['Flight', 'Line', 'Fid_start','Fid_end','Length_OOS','Max_drape_dev','Avg_drape_dev','Avg_speed'])
-
-    ################## SELECT DATABASE ####################################################
-    gdb = pd.read_csv(in_path).set_index(["Line", "FIDCOUNT"])
 
     ################### ADD CHANNELS ####################################################
 
@@ -378,6 +362,40 @@ def rungx(in_path, out_path, verbose):
         if OOS_4th>0: # If any out of spec records.
             OOS_4th_line_count += 1 # add a line to the count!
             noise_summary.loc[len(noise_summary)] = [flight_num, line, OOS_4th] # Append the line to the noise_summary.
+                
+    return (gdb,
+            OOS_4th_line_count,
+            noise_summary,
+            OOS_diurnal_line_count,
+            diurnal_summary,
+            drape_summary
+            )
+            
+################## ACTUAL SCRIPT THAT RUNS IN OM MENU ####################################################
+@click.command()
+@click.argument('in_path', type=click.Path(exists=True))
+@click.argument('out_path', type=click.Path(), default=".")
+@click.option('--verbose', is_flag=True, help='Enable verbose output.')
+def rungx(in_path, out_path, verbose):
+    gdb = pd.read_csv(in_path).set_index(["Line", "FIDCOUNT"])
+    
+    ################## QC Summaries Prep ####################################################
+    # Out path for QC Summaries
+    if out_path:
+        os.makedirs(out_path, exist_ok=True)
+    # Prep output file paths
+    out_path_data = out_path + '/data.csv'
+    out_path_noise = out_path + '/OOS_4th_difference.csv'
+    out_path_diurnal = out_path + '/OOS_diurnal.csv'
+    out_path_drape = out_path + '/OOS_drape.csv'
+
+    (gdb,
+     OOS_4th_line_count,
+     noise_summary,
+     OOS_diurnal_line_count,
+     diurnal_summary,
+     drape_summary
+     ) = process_all(gdb)
 
     gdb.reset_index().to_csv(out_path_data, index=False)
             
