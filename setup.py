@@ -31,6 +31,7 @@ setup(
             'highpass_filter_butterworth = magproc.magfilters:highpass_filter_butterworth',
             'bandpass_filter_butterworth = magproc.magfilters:bandpass_filter_butterworth',
             'downline_distance = magproc.magfilters:downline_distance',
+            'elevation = magproc.magfilters:elevation',
             'surface_error = magproc.magfilters:surface_error',
         ],        
     },

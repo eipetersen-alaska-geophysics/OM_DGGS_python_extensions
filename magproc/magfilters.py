@@ -466,6 +466,9 @@ def downline_distance_group(group):
 def downline_distance(pipeline, data):
     data.data = data.data.groupby(level='Line', group_keys=False).apply(downline_distance_group)
 
+def elevation(pipeline, data):
+    data.data["elevation"] = data.data["GPSALT"] - data.data["DEMIFSAR"]
+
 def surface_error(pipeline, data):
     data.data["surface_error"] = data.data["GPSALT"] - data.data["Surface"]
     data.data["surface_error_abs"] = np.abs(data.data["surface_error"])
