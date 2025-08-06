@@ -102,8 +102,10 @@ class MagData:
         from . import plots
         return plots.plot_line(self, line, **kw)
         
-    def plot_lines(self, plotfn, **kw):
-        for line in self.data.index.get_level_values('Line').unique():
+    def plot_lines(self, plotfn, lines=None, **kw):
+        if lines is None:
+            lines = self.data.index.get_level_values('Line').unique()
+        for line in lines:
             axs = plotfn(self, line, **kw)
             axs[0].set_title(f"Line: {line}")        
             plt.show()
