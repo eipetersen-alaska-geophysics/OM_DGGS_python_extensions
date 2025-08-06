@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import yaml
 import zipfile
 from io import BytesIO, StringIO
@@ -68,36 +69,40 @@ class MagData:
         if crs is not None:
             gdf = gdf.to_crs(epsg=3857)
 
+        xmin, ymin, xmax, ymax = gdf.total_bounds
+        x_center = (xmin + xmax) / 2
+        y_center = (ymin + ymax) / 2
+
+        def zoom_to_extent(zoom, pixels):
+            # Define zoom level and corresponding resolution in meters/pixel
+            # Based on Web Mercator tile scale (Google Maps / OSM)
+            tile_size = 256  # pixels
+            initial_resolution = 2 * np.pi * 6378137 / tile_size  # ≈ 156543.03
+            res = initial_resolution / (2 ** zoom)
+            extent_meters = tile_size * res
+            return extent_meters * (pixels // tile_size)
+
+        extent = zoom_to_extent(zoom, 512) # Two tiles width
+        xlim = (x_center - extent / 2, x_center + extent / 2)
+        ylim = (y_center - extent / 2, y_center + extent / 2)
 
         if "ax" in kw:
-            ax = kw["ax"]
-            xlim = ax.get_xlim()
-            ylim = ax.get_ylim()
+            ax = kw.pop("ax")
         else:
-            # Get full bounds of the data (to estimate center)
-            xmin, ymin, xmax, ymax = gdf.total_bounds
-            x_center = (xmin + xmax) / 2
-            y_center = (ymin + ymax) / 2
-            tile_size = 40075016.68557849 / (2 ** zoom)  # world extent / 2^zoom
-            half_size = tile_size / 2
+            fig, ax = plt.subplots()
+        gdf.plot(ax=ax, **kw)
 
-            xlim = (x_center - half_size, x_center + half_size)
-            ylim = (y_center - half_size, y_center + half_size)
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
 
-        gdf = gdf.cx[xlim[0]:xlim[1], ylim[0]:ylim[1]]
-        gdf = gdf.sample(n=min(len(gdf), max_points), random_state=42)
-
-        ax = gdf.plot(**kw)
-        ctx.add_basemap(ax, source=ctx.providers.CartoDB.Positron, zoom=zoom)
+        ctx.add_basemap(ax, source=ctx.providers.OpenTopoMap, zoom=zoom)
         ax.set_title(f"Mag Data: {self.meta.get('filename', '')}")
         ax.set_axis_off()
-
-        if "ax" not in kw:
-            plt.tight_layout()
-            plt.show()
+        plt.tight_layout()
+        plt.show()            
 
         return ax
-
+    
     def plot_line(self, line, **kw):
         from . import plots
         return plots.plot_line(self, line, **kw)
