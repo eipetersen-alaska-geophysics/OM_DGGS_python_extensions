@@ -20,14 +20,12 @@ def plot_line(data, line, columns=["MAGCOM", "Diurnal", "Residual"], xcolumn="in
             ax2 = ax1.twinx()
             ax2.plot(xdata, linedata.MAGCOM - linedata.Diurnal, c="blue", label="Residual (MAGCOM - Diurnal)")
             ax2.set_ylabel("Residual")
-            ax2.tick_params(axis='y')
         else:
             ax1.plot(xdata, linedata[column], label=column)
             ax1cols.append(column)
 
     ax1.set_xlabel(xcolumn)
     ax1.set_ylabel(" / ".join(ax1cols))
-    ax1.tick_params(axis='y')
 
     lines_1, labels_1 = ax1.get_legend_handles_labels()
     lines_2, labels_2 = ax2.get_legend_handles_labels() if ax2 is not None else ([], [])
@@ -58,20 +56,25 @@ def plot_drape_qc(data, line, figsize=(20, 15), **kw):
     
     return [ax1, ax2, ax3, ax4, ax5]
 
-def plot_drape_qc2(data, line, figsize=(20, 8), **kw):
+def plot_drape_qc2(data, line, figsize=(20, 6), **kw):
     fig = plt.figure(figsize=figsize)
-    gs = gridspec.GridSpec(1, 2, width_ratios=[2, 1], wspace=0.0)
-    
-    ax1 = fig.add_subplot(gs[0], sharey=None)
-    ax2 = fig.add_subplot(gs[1], sharey=ax1)
+
+    gs = gridspec.GridSpec(2, 2, width_ratios=[2, 1], height_ratios=[2, 1], hspace=0, wspace=0)
+
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[0, 1], sharey=ax1)
+    ax3 = fig.add_subplot(gs[1, 0], sharex=ax1)
     
     plot_line(data, line, columns=["surface_error", "zero"], ax=ax1, **kw)
     ax2.hist(data.data.loc[line, "surface_error"], bins=100, range=(-50, 50), orientation='horizontal')
-
+    plot_line(data, line, columns=["elevation"], ax=ax3, **kw)
+        
     ax2.set_xlabel("Count")
-    ax2.label_outer()
+
+    ax1.tick_params(labelbottom=False)
+    ax2.tick_params(labelleft=False)
     
-    return [ax1, ax2]
+    return [ax1, ax2, ax3]
 
 
 def plot_diurnal_qc(data, line, figsize=(10, 10), **kw):
