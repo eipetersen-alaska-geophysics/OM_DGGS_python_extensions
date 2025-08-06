@@ -13,7 +13,7 @@ class MagData:
     def __init__(self, data: pd.DataFrame, **meta):
         self.data = data
         self.meta = meta
-
+        
     @classmethod
     def load(cls, path: str, **kws):
         """Load mag data from file. Filename should end in .mag.zip or .csv"""
@@ -40,10 +40,21 @@ class MagData:
             z.writestr("meta.yaml", yaml.dump(self.meta))
 
     def __repr__(self):
+        self.get_sample_frequency()
         return f"""{yaml.dump(self.meta)}
 
         {self.data.describe().T.to_string()}"""
 
+    def get_sample_frequency(self):
+        if "sample_frequency" not in self.meta:
+            timediffs = self.data.UTCTIME - self.data.UTCTIME.shift(1)
+            self.meta["sample_frequency"] = float(
+                1 / (timediffs[
+                    self.data.index.get_level_values('Line')
+                    == pd.Series(self.data.index.get_level_values('Line')).shift(1)
+                ].mode()[0]))
+        return self.meta["sample_frequency"]
+    
     def plot_map(self, zoom=12, max_points=5000, **kw):
         """Plot data with contextily basemap. Assumes Easting/Northing in self.meta['crs']."""
         crs = self.meta.get('crs', None)
@@ -87,27 +98,29 @@ class MagData:
 
         return ax
 
-    def plot(self):
+    def plot(self, columns=["MAGCOM", "Diurnal", "Residual"]):
         for line in self.data.index.get_level_values('Line').unique():
             linedata = self.data.loc[line]
 
             fig, ax1 = plt.subplots()
+            ax2 = None
 
-            # Primary y-axis
-            ax1.plot(linedata.index, linedata.MAGCOM, c="red", label="MAGCOM")
-            ax1.plot(linedata.index, linedata.Diurnal, c="green", label="Diurnal")
-            ax1.set_ylabel("MAGCOM / Diurnal")
+            ax1cols = []
+            for column in columns:
+                if column == "Residual":
+                    ax2 = ax1.twinx()
+                    ax2.plot(linedata.index, linedata.MAGCOM - linedata.Diurnal, c="blue", label="Residual (MAGCOM - Diurnal)")
+                    ax2.set_ylabel("Residual")
+                    ax2.tick_params(axis='y')
+                else:
+                    ax1.plot(linedata.index, linedata[column], label=column)
+                    ax1cols.append(column)
+            
+            ax1.set_ylabel(" / ".join(ax1cols))
             ax1.tick_params(axis='y')
 
-            # Secondary y-axis
-            ax2 = ax1.twinx()
-            ax2.plot(linedata.index, linedata.MAGCOM - linedata.Diurnal, c="blue", label="Residual (MAGCOM - Diurnal)")
-            ax2.set_ylabel("Residual")
-            ax2.tick_params(axis='y')
-
-            # Optional: Combine legends from both axes
             lines_1, labels_1 = ax1.get_legend_handles_labels()
-            lines_2, labels_2 = ax2.get_legend_handles_labels()
+            lines_2, labels_2 = ax2.get_legend_handles_labels() if ax2 is not None else ([], [])
             ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc="upper right")
 
             plt.title(f"Line: {line}")

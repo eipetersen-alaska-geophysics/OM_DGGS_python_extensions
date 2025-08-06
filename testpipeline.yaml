@@ -5,6 +5,8 @@ steps:
        lat: 62.9588417 
        lon: -155.599325 
  - set_constants
+ - lowpass_filter_butterworth:
+     cutoff_freq: 2 # Hz, note max at the nyquist freq at sample rate 40Hz / 2
  - diurnal_qc_for_15s_chord
  - diurnal_qc_for_60s_chord
  - drape_and_speed_qc

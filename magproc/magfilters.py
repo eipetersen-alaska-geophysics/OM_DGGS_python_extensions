@@ -96,6 +96,7 @@ properly documented/industry standard formula!
 
 import numpy as np
 import pandas as pd
+from scipy.signal import butter, filtfilt
 import os
 import click
 
@@ -426,3 +427,32 @@ def write_drape_summary(pipeline, data, filename="OOS_drape.csv"):
 
 def set_meta(pipeline, data, **meta):
     data.meta.update(meta)
+
+def frequency_to_butterworth_cutoff(sampling_freq, cutoff_freqs):
+    nyquist = 0.5 * sampling_freq
+    if isinstance(cutoff_freqs, (list, tuple)):
+        return [f / nyquist for f in cutoff_freqs]
+    else:
+        return cutoff_freqs / nyquist
+
+def butterworth_filter_array(data, cutoff_freq, sampling_freq, order=4, btype='low'):
+    normalized_cutoff = frequency_to_butterworth_cutoff(sampling_freq, cutoff_freq)
+    b, a = butter(order, normalized_cutoff, btype=btype, analog=False)
+    return filtfilt(b, a, data)
+
+def butterworth_filter(pipeline, data, column='MAGCOM', column_out="MAGCOM_filtered", cutoff_freq=1.0, order=4, btype='low'):
+    sampling_freq = data.get_sample_frequency()
+    def filter_group(group):
+        group = group.copy()
+        group[column_out] = butterworth_filter_array(group[column].values, cutoff_freq, sampling_freq, order, btype=btype)
+        return group
+    data.data = data.data.groupby(level='Line', group_keys=False).apply(filter_group)
+
+def lowpass_filter_butterworth(pipeline, data, column='MAGCOM', column_out="MAGCOM_filtered", cutoff_freq=1.0, order=4):
+    butterworth_filter(pipeline, data, column=column, column_out=column_out, cutoff_freq=cutoff_freq, order=order, btype='low')
+
+def highpass_filter_butterworth(pipeline, data, column='MAGCOM', column_out="MAGCOM_filtered", cutoff_freq=1.0, order=4):
+    butterworth_filter(pipeline, data, column=column, column_out=column_out, cutoff_freq=cutoff_freq, order=order, btype='high')
+
+def bandpass_filter_butterworth(pipeline, data, column='MAGCOM', column_out="MAGCOM_filtered", cutoff_freq_low=1.0, cutoff_freq_high=1.0, order=4):
+    butterworth_filter(pipeline, data, column=column, column_out=column_out, cutoff_freq=[cutoff_freq_low, cutoff_freq_high], order=order, btype='low')
