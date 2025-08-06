@@ -456,3 +456,12 @@ def highpass_filter_butterworth(pipeline, data, column='MAGCOM', column_out="MAG
 
 def bandpass_filter_butterworth(pipeline, data, column='MAGCOM', column_out="MAGCOM_filtered", cutoff_freq_low=1.0, cutoff_freq_high=1.0, order=4):
     butterworth_filter(pipeline, data, column=column, column_out=column_out, cutoff_freq=[cutoff_freq_low, cutoff_freq_high], order=order, btype='low')
+
+def downline_distance_group(group):
+    group = group.copy()
+    group["distance"] = np.sqrt((group.Easting - group.Easting.shift(1)).fillna(0) ** 2
+                                + (group.Northing - group.Northing.shift(1)).fillna(0) **2).cumsum()
+    return group
+ 
+def downline_distance(pipeline, data):
+    data.data = data.data.groupby(level='Line', group_keys=False).apply(downline_distance_group)
