@@ -14,6 +14,10 @@ class MagPipeline:
         self.pipeline.update(kwargs)
 
     @classmethod
+    def parse(cls, pipeline:str, **kwargs):
+        return cls(yaml.safe_load(pipeline), **kwargs)
+        
+    @classmethod
     def load(cls, path:str, **kwargs):
         with open(path, 'r') as f:
             return cls(yaml.safe_load(f), **kwargs)
