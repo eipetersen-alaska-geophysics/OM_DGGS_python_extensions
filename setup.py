@@ -25,6 +25,7 @@ setup(
             'write_noise_summary = magproc.magfilters:write_noise_summary',
             'write_diurnal_summary = magproc.magfilters:write_diurnal_summary',
             'write_drape_summary = magproc.magfilters:write_drape_summary',            
+            'set_meta = magproc.magfilters:set_meta',            
         ],        
     },
 )

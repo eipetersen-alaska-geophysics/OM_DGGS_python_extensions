@@ -423,3 +423,6 @@ def write_drape_summary(pipeline, data, filename="OOS_drape.csv"):
     #     OOS_drape_line_count, OOS_drape_segment_count, OOS_drape_meters/1000, OOS_diurnal_line_count, OOS_4th_line_count, out_path)
 
     # print("QC Calculations Complete.", sum_text)
+
+def set_meta(pipeline, data, **meta):
+    data.meta.update(meta)

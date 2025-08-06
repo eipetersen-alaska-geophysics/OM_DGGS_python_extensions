@@ -25,7 +25,11 @@ class MagPipeline:
                 kwargs = {}
             else:
                 step_name, kwargs = next(iter(step.items()))
-            print(f"Running step {idx}: {step_name} with args {kwargs}")
+            if kwargs:
+                params = ", ".join("%s=%s" % (k, v) for k, v in kwargs.items())
+                print(f"Running step {idx}: {step_name} with {params}")
+            else:
+                print(f"Running step {idx}: {step_name}")
             try:
                 func = filters[step_name]
             except:

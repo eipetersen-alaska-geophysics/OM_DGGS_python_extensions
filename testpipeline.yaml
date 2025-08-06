@@ -1,10 +1,15 @@
 steps:
+ - set_meta:
+     crs: 32604
+     diurnal:
+       lat: 62.9588417 
+       lon: -155.599325 
  - set_constants
  - diurnal_qc_for_15s_chord
  - diurnal_qc_for_60s_chord
  - drape_and_speed_qc
  - noice_qc:
-   MAG_4th_diff_OOS_threshold: 0.05
+     MAG_4th_diff_OOS_threshold: 0.05
  - write_noise_summary
  - write_diurnal_summary
  - write_drape_summary
