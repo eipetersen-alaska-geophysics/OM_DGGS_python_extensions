@@ -57,3 +57,35 @@ def plot_drape_qc(data, line, figsize=(20, 15), **kw):
         ax.label_outer()
     
     return [ax1, ax2, ax3, ax4, ax5]
+
+def plot_diurnal_qc(data, line, figsize=(10, 10), **kw):
+    fig = plt.figure(figsize=figsize)
+    gs = gridspec.GridSpec(3, 1, height_ratios=[1, 1, 1], hspace=0.1)
+    
+    ax1 = fig.add_subplot(gs[0], sharex=None)
+    ax2 = fig.add_subplot(gs[1], sharex=ax1)
+    ax3 = fig.add_subplot(gs[2], sharex=ax1)
+    
+    
+    plot_line(data, line, columns=["L_magDIFF60", "zero"], ax=ax1, **kw)
+    plot_line(data, line, columns=["L_magDIFF15", "zero"], ax=ax2, **kw)
+    plot_line(data, line, columns=["MAGCOM", "Diurnal"], ax=ax3, **kw)
+
+    for ax in [ax1, ax2]:
+        ax.label_outer()
+    
+    return [ax1, ax2, ax3]
+
+def plot_hf_noise_qc(data, line, figsize=(10, 10), **kw):
+    fig = plt.figure(figsize=figsize)
+    gs = gridspec.GridSpec(3, 1, height_ratios=[1, 1, 1], hspace=0.1)
+    
+    ax1 = fig.add_subplot(gs[0], sharex=None)
+    ax2 = fig.add_subplot(gs[1], sharex=ax1)
+    
+    plot_line(data, line, columns=["MAGCOM", "MAGUNCOM"], ax=ax1, **kw)
+    plot_line(data, line, columns=["hf_noise", "MAGCOM_4th"], ax=ax2, **kw)
+
+    ax1.label_outer()
+    
+    return [ax1, ax2]
