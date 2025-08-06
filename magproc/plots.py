@@ -58,6 +58,22 @@ def plot_drape_qc(data, line, figsize=(20, 15), **kw):
     
     return [ax1, ax2, ax3, ax4, ax5]
 
+def plot_drape_qc2(data, line, figsize=(20, 8), **kw):
+    fig = plt.figure(figsize=figsize)
+    gs = gridspec.GridSpec(1, 2, width_ratios=[2, 1], wspace=0.0)
+    
+    ax1 = fig.add_subplot(gs[0], sharey=None)
+    ax2 = fig.add_subplot(gs[1], sharey=ax1)
+    
+    plot_line(data, line, columns=["surface_error", "zero"], ax=ax1, **kw)
+    ax2.hist(data.data.loc[line, "surface_error"], bins=100, range=(-50, 50), orientation='horizontal')
+
+    ax2.set_xlabel("Count")
+    ax2.label_outer()
+    
+    return [ax1, ax2]
+
+
 def plot_diurnal_qc(data, line, figsize=(10, 10), **kw):
     fig = plt.figure(figsize=figsize)
     gs = gridspec.GridSpec(3, 1, height_ratios=[1, 1, 1], hspace=0.1)
