@@ -98,30 +98,39 @@ class MagData:
 
         return ax
 
-    def plot(self, columns=["MAGCOM", "Diurnal", "Residual"]):
-        for line in self.data.index.get_level_values('Line').unique():
-            linedata = self.data.loc[line]
+    def plot_line(self, line, columns=["MAGCOM", "Diurnal", "Residual"], ax=None):
+        linedata = self.data.loc[line]
 
+        ax1 = ax
+        if ax is None:
             fig, ax1 = plt.subplots()
-            ax2 = None
+        ax2 = None
 
-            ax1cols = []
-            for column in columns:
-                if column == "Residual":
-                    ax2 = ax1.twinx()
-                    ax2.plot(linedata.index, linedata.MAGCOM - linedata.Diurnal, c="blue", label="Residual (MAGCOM - Diurnal)")
-                    ax2.set_ylabel("Residual")
-                    ax2.tick_params(axis='y')
-                else:
-                    ax1.plot(linedata.index, linedata[column], label=column)
-                    ax1cols.append(column)
-            
-            ax1.set_ylabel(" / ".join(ax1cols))
-            ax1.tick_params(axis='y')
+        ax1cols = []
+        for column in columns:
+            if column == "Residual":
+                ax2 = ax1.twinx()
+                ax2.plot(linedata.index, linedata.MAGCOM - linedata.Diurnal, c="blue", label="Residual (MAGCOM - Diurnal)")
+                ax2.set_ylabel("Residual")
+                ax2.tick_params(axis='y')
+            else:
+                ax1.plot(linedata.index, linedata[column], label=column)
+                ax1cols.append(column)
 
-            lines_1, labels_1 = ax1.get_legend_handles_labels()
-            lines_2, labels_2 = ax2.get_legend_handles_labels() if ax2 is not None else ([], [])
-            ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc="upper right")
+        ax1.set_ylabel(" / ".join(ax1cols))
+        ax1.tick_params(axis='y')
 
-            plt.title(f"Line: {line}")
+        lines_1, labels_1 = ax1.get_legend_handles_labels()
+        lines_2, labels_2 = ax2.get_legend_handles_labels() if ax2 is not None else ([], [])
+        ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc="upper right")
+
+        return [ax1, ax2] if ax2 is not None else [ax1]
+        
+    def plot_lines(self, plotfn, **kw):
+        for line in self.data.index.get_level_values('Line').unique():
+            axs = plotfn(self, line, **kw)
+            axs[0].set_title(f"Line: {line}")        
             plt.show()
+        
+    def plot(self, columns=["MAGCOM", "Diurnal", "Residual"], **kw):
+        self.plot_lines(MagData.plot_line, columns=columns, **kw)
