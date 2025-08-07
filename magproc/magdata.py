@@ -11,6 +11,7 @@ import contextily as ctx
 from shapely.geometry import Point
 from scipy.spatial import cKDTree
 import matplotlib.gridspec as gridspec
+from . import mapplot
 from . import loader
 
 class MagData:
@@ -58,7 +59,7 @@ class MagData:
                 ].mode()[0]))
         return self.meta["sample_frequency"]
     
-    def plot_map(self, zoom=12, max_points=5000, **kw):
+    def plot_map(self, markersize=1, column="MAGCOM", zoom=9, max_points=5000, **kw):
         """Plot data with contextily basemap. Assumes Easting/Northing in self.meta['crs']."""
         crs = self.meta.get('crs', None)
 
@@ -67,41 +68,13 @@ class MagData:
             geometry=gpd.points_from_xy(self.data.Easting, self.data.Northing),
             crs=crs or 3857
         )
-
+        
         if crs is not None:
             gdf = gdf.to_crs(epsg=3857)
 
-        xmin, ymin, xmax, ymax = gdf.total_bounds
-        x_center = (xmin + xmax) / 2
-        y_center = (ymin + ymax) / 2
-
-        def zoom_to_extent(zoom, pixels):
-            # Define zoom level and corresponding resolution in meters/pixel
-            # Based on Web Mercator tile scale (Google Maps / OSM)
-            tile_size = 256  # pixels
-            initial_resolution = 2 * np.pi * 6378137 / tile_size  # ≈ 156543.03
-            res = initial_resolution / (2 ** zoom)
-            extent_meters = tile_size * res
-            return extent_meters * (pixels // tile_size)
-
-        extent = zoom_to_extent(zoom, 512) # Two tiles width
-        xlim = (x_center - extent / 2, x_center + extent / 2)
-        ylim = (y_center - extent / 2, y_center + extent / 2)
-
-        if "ax" in kw:
-            ax = kw.pop("ax")
-        else:
-            fig, ax = plt.subplots()
-        gdf.plot(ax=ax, **kw)
-
-        ax.set_xlim(xlim)
-        ax.set_ylim(ylim)
-
-        ctx.add_basemap(ax, source=ctx.providers.OpenTopoMap, zoom=zoom)
+        ax = mapplot.plot_map(gdf, markersize=markersize, column=column, zoom=zoom, max_points=max_points, **kw)
         ax.set_title(f"Mag Data: {self.meta.get('filename', '')}")
         ax.set_axis_off()
-        plt.tight_layout()
-        plt.show()            
 
         return ax
     
@@ -173,30 +146,50 @@ class MagDataLineCrossings:
 Filename: {self.data.meta.get("filename", "")}
         
 {self.crossings[["GPSALT_DIFF", "MAGCOM_DIFF", "MAGUNCOM_DIFF", "distance"]].describe().T.to_string()}"""
-        
+
+    def plot_map(self, markersize=1, column="MAGCOM_DIFF", zoom=9, **kw):
+        crs = self.data.meta.get('crs', None)
+
+        gdf = gpd.GeoDataFrame(
+            self.crossings.copy(),
+            geometry=gpd.points_from_xy(self.crossings.Easting_1, self.crossings.Northing_1),
+            crs=crs or 3857
+        )
+
+        if crs is not None:
+            gdf = gdf.to_crs(epsg=3857)
+
+        return mapplot.plot_map(gdf, markersize=markersize, zoom=zoom, column=column, **kw)        
+    
     def plot(self, figsize=(20, 6)):
         fig = plt.figure(figsize=figsize)
 
         gs = gridspec.GridSpec(2, 2, width_ratios=[1, 1], height_ratios=[1, 1], hspace=0, wspace=0)
 
-        ax1 = fig.add_subplot(gs[0, 0])
+        ax0 = fig.add_subplot(gs[0, 0])
+        ax1 = fig.add_subplot(gs[0, 1], sharey=ax0)
         ax2 = fig.add_subplot(gs[1, 0], sharex=ax1)
-        ax3 = fig.add_subplot(gs[0, 1], sharey=ax1)
 
+        ax0.scatter(self.crossings.MAGCOM_DIFF, self.crossings.GPSALT_DIFF, s=1)
+        ax0.set_xlabel("MAGCOM difference")
+        ax0.set_ylabel("Altitude difference (m)")
+
+        ax0.secondary_xaxis('top').set_xlabel("MAGCOM difference")
+        
         ax1.hist(self.crossings.GPSALT_DIFF, bins=100, orientation='horizontal')
-        ax1.set_ylabel("Altitude difference (m)")
         ax1.set_xlabel("Number of line crossings")
+        ax1.secondary_yaxis('right').set_ylabel("Altitude difference (m)")
 
-        ax2.hist(self.crossings.MAGCOM_DIFF, bins=100, orientation='horizontal', color="blue", label="MAGCOM")
-        ax2.hist(self.crossings.MAGUNCOM_DIFF, bins=100, orientation='horizontal', color="red", histtype='step', label="MAGUNCOM")
-        ax2.set_ylabel("MAGCOM/MAGUNCOM difference")
-        ax2.set_xlabel("Number of line crossings")
+        ax2.hist(self.crossings.MAGCOM_DIFF, bins=100, color="blue", label="MAGCOM")
+        ax2.hist(self.crossings.MAGUNCOM_DIFF, bins=100, color="red", histtype='step', label="MAGUNCOM")
+        ax2.set_xlabel("MAGCOM/MAGUNCOM difference")
         ax2.legend()
-        
-        ax3.scatter(self.crossings.MAGCOM_DIFF, self.crossings.GPSALT_DIFF, s=1)
-        ax3.set_xlabel("MAGCOM difference")
+        ax2.invert_yaxis()
+        ax2.secondary_yaxis('right').set_ylabel("Number of line crossings")
 
-        ax1.tick_params(labelbottom=False)
-        ax3.tick_params(labelleft=False)
         
-        return [ax1, ax2, ax3]
+        ax0.tick_params(labelbottom=False)
+        ax1.tick_params(labelleft=False)
+        ax2.tick_params(labelleft=False)
+        
+        return [ax0, ax1, ax2]
