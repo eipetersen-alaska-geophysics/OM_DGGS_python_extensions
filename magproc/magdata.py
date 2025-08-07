@@ -58,20 +58,21 @@ class MagData:
                     == pd.Series(self.data.index.get_level_values('Line')).shift(1)
                 ].mode()[0]))
         return self.meta["sample_frequency"]
-    
-    def plot_map(self, markersize=1, column="MAGCOM", zoom=9, max_points=5000, **kw):
-        """Plot data with contextily basemap. Assumes Easting/Northing in self.meta['crs']."""
-        crs = self.meta.get('crs', None)
 
+    def as_geodataframe(self):
+        crs = self.meta.get('crs', None)
         gdf = gpd.GeoDataFrame(
             self.data.copy(),
             geometry=gpd.points_from_xy(self.data.Easting, self.data.Northing),
             crs=crs or 3857
         )
-        
         if crs is not None:
             gdf = gdf.to_crs(epsg=3857)
-
+        return gdf
+    
+    def plot_map(self, markersize=1, column="MAGCOM", zoom=9, max_points=5000, **kw):
+        """Plot data with contextily basemap. Assumes Easting/Northing in self.meta['crs']."""
+        gdf = self.as_geodataframe()
         ax = mapplot.plot_map(gdf, markersize=markersize, column=column, zoom=zoom, max_points=max_points, **kw)
         ax.set_title(f"Mag Data: {self.meta.get('filename', '')}")
         ax.set_axis_off()
@@ -147,18 +148,19 @@ Filename: {self.data.meta.get("filename", "")}
         
 {self.crossings[["GPSALT_DIFF", "MAGCOM_DIFF", "MAGUNCOM_DIFF", "distance"]].describe().T.to_string()}"""
 
-    def plot_map(self, markersize=1, column="MAGCOM_DIFF", zoom=9, **kw):
+    def as_geodataframe(self):
         crs = self.data.meta.get('crs', None)
-
         gdf = gpd.GeoDataFrame(
             self.crossings.copy(),
             geometry=gpd.points_from_xy(self.crossings.Easting_1, self.crossings.Northing_1),
             crs=crs or 3857
         )
-
         if crs is not None:
             gdf = gdf.to_crs(epsg=3857)
-
+        return gdf
+    
+    def plot_map(self, markersize=1, column="MAGCOM_DIFF", zoom=9, **kw):
+        gdf = self.as_geodataframe()
         return mapplot.plot_map(gdf, markersize=markersize, zoom=zoom, column=column, **kw)        
     
     def plot(self, figsize=(20, 6)):
