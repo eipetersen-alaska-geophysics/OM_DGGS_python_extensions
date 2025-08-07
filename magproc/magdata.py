@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 import contextily as ctx
 from shapely.geometry import Point
+from . import loader
 
 class MagData:
     def __init__(self, data: pd.DataFrame, **meta):
@@ -18,16 +19,15 @@ class MagData:
     @classmethod
     def load(cls, path: str, **kws):
         """Load mag data from file. Filename should end in .mag.zip or .csv"""
-        if path.endswith(".csv"):
-            with open(path) as f:
-                df = pd.read_csv(f)
-                meta = {}
-        else:
+        if path.endswith(".mag.zip"):
             with zipfile.ZipFile(path, 'r') as z:
                 with z.open("data.csv") as f:
                     df = pd.read_csv(f)
                 with z.open("meta.yaml") as f:
                     meta = yaml.safe_load(f)
+        else:
+            df = loader.parse(path)
+            meta = {}
         meta["filename"] = os.path.split(path)[-1]
         meta.update(kws)
         return cls(df.set_index(["Line", "FIDCOUNT"]), **meta)
