@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 import contextily as ctx
 from shapely.geometry import Point
+from scipy.spatial import cKDTree
+import matplotlib.gridspec as gridspec
 from . import loader
 
 class MagData:
@@ -44,7 +46,7 @@ class MagData:
         self.get_sample_frequency()
         return f"""{yaml.dump(self.meta)}
 
-        {self.data.describe().T.to_string()}"""
+{self.data.describe().T.to_string()}"""
 
     def get_sample_frequency(self):
         if "sample_frequency" not in self.meta:
@@ -117,3 +119,84 @@ class MagData:
         
     def plot(self, columns=["MAGCOM", "Diurnal", "Residual"], **kw):
         self.plot_lines(MagData.plot_line, columns=columns, **kw)
+
+
+    def find_line_crossings(self, max_dist = 10):
+        df = self.data.reset_index()
+
+        xs = df.Easting.values
+        ys = df.Northing.values
+
+        coords = np.vstack((xs, ys)).T
+        tree = cKDTree(coords)
+
+        pairs = tree.query_pairs(r=max_dist, output_type="ndarray")
+        lines = df['Line'].values
+
+        # Filter pairs where Line differs
+        mask = lines[pairs[:, 0]] != lines[pairs[:, 1]]
+        filtered_pairs = pairs[mask]
+
+        p1xs = xs[filtered_pairs[:,0]]
+        p1ys = ys[filtered_pairs[:,0]]
+
+        p2xs = xs[filtered_pairs[:,1]]
+        p2ys = ys[filtered_pairs[:,1]]
+
+        distances = np.sqrt((p1xs - p2xs)**2 + (p1ys - p2ys)**2)
+
+        results = pd.concat([
+            df.iloc[filtered_pairs[:, 0]].rename(
+                columns={name: name + "_1" for name in df.columns}).reset_index(drop=True),
+            df.iloc[filtered_pairs[:, 1]].rename(
+                columns={name: name + "_2" for name in df.columns}).reset_index(drop=True)], axis=1
+                        ).assign(distance=distances)
+
+        results = results.assign(
+            GPSALT_DIFF = np.abs(results.GPSALT_1 - results.GPSALT_2),
+            MAGCOM_DIFF = np.abs(results.MAGCOM_1 - results.MAGCOM_2),
+            MAGUNCOM_DIFF = np.abs(results.MAGUNCOM_1 - results.MAGUNCOM_2))
+        
+        min_idx = results.groupby(['Line_1', 'Line_2'])['distance'].idxmin()
+        return MagDataLineCrossings(
+            self, results.loc[min_idx].reset_index(drop=True),
+            max_dist = max_dist)
+
+class MagDataLineCrossings:
+    def __init__(self, data: MagData, crossings: pd.DataFrame, max_dist: float):
+        self.data = data
+        self.crossings = crossings
+        self.max_dist = max_dist
+
+    def __repr__(self):
+        return f"""Max distance: {self.max_dist}
+Filename: {self.data.meta.get("filename", "")}
+        
+{self.crossings[["GPSALT_DIFF", "MAGCOM_DIFF", "MAGUNCOM_DIFF", "distance"]].describe().T.to_string()}"""
+        
+    def plot(self, figsize=(20, 6)):
+        fig = plt.figure(figsize=figsize)
+
+        gs = gridspec.GridSpec(2, 2, width_ratios=[1, 1], height_ratios=[1, 1], hspace=0, wspace=0)
+
+        ax1 = fig.add_subplot(gs[0, 0])
+        ax2 = fig.add_subplot(gs[1, 0], sharex=ax1)
+        ax3 = fig.add_subplot(gs[0, 1], sharey=ax1)
+
+        ax1.hist(self.crossings.GPSALT_DIFF, bins=100, orientation='horizontal')
+        ax1.set_ylabel("Altitude difference (m)")
+        ax1.set_xlabel("Number of line crossings")
+
+        ax2.hist(self.crossings.MAGCOM_DIFF, bins=100, orientation='horizontal', color="blue", label="MAGCOM")
+        ax2.hist(self.crossings.MAGUNCOM_DIFF, bins=100, orientation='horizontal', color="red", histtype='step', label="MAGUNCOM")
+        ax2.set_ylabel("MAGCOM/MAGUNCOM difference")
+        ax2.set_xlabel("Number of line crossings")
+        ax2.legend()
+        
+        ax3.scatter(self.crossings.MAGCOM_DIFF, self.crossings.GPSALT_DIFF, s=1)
+        ax3.set_xlabel("MAGCOM difference")
+
+        ax1.tick_params(labelbottom=False)
+        ax3.tick_params(labelleft=False)
+        
+        return [ax1, ax2, ax3]
