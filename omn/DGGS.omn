@@ -1,6 +1,0 @@
-/ DGGS Custom Python extensions
-/------------------------------------------------------------------------------
- 
-MENU "DGGS"
-ITEM "Deselect Lines Through Flight Number..."   ,line_deselector_thru_flight_number.py
-ITEM "Magnetic QC Calculations and Auto Summary..."  ,mag_qc_prep_and_auto_summary.py
