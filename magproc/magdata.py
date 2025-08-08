@@ -11,6 +11,7 @@ import contextily as ctx
 from shapely.geometry import Point
 from scipy.spatial import cKDTree
 import matplotlib.gridspec as gridspec
+import copy
 from . import mapplot
 from . import loader
 
@@ -49,6 +50,9 @@ class MagData:
 
 {self.data.describe().T.to_string()}"""
 
+    def get_lines(self):
+        return self.data.index.get_level_values('Line').unique()
+    
     def get_sample_frequency(self):
         if "sample_frequency" not in self.meta:
             timediffs = self.data.UTCTIME - self.data.UTCTIME.shift(1)
@@ -69,6 +73,33 @@ class MagData:
         if crs is not None:
             gdf = gdf.to_crs(epsg=3857)
         return gdf
+
+    def to_crs(self, crs):
+        data = self.data.copy()
+        geom = self.as_geodataframe().to_crs(crs).geometry
+
+        data["Easting"] = geom.x.values
+        data["Northing"] = geom.y.values
+
+        meta = copy.deepcopy(self.meta)
+        meta["crs"] = crs
+        
+        return type(self)(data, **meta)
+
+    def append(self, other):
+        assert self.meta.get("crs") == other.meta.get("crs"), "Both datasets need to have the same CRS to be merged. Use to_crs() first."
+
+        def merge_meta(a, b):
+            if isinstance(a, dict) and isinstance(b, dict):
+                return {k: a[k] if k not in b else (b[k] if k not in a else merge_meta(a[k], b[k]))
+                        for k in set(a.keys()).union(b.keys())}
+            else:
+                return a
+                
+        data = pd.concat((self.data, other.data), axis=0)
+        meta = merge_meta(self.meta, other.meta)
+
+        return type(self)(data, **meta)
     
     def plot_map(self, markersize=1, column="MAGCOM", zoom=9, max_points=5000, **kw):
         """Plot data with contextily basemap. Assumes Easting/Northing in self.meta['crs']."""
@@ -85,7 +116,7 @@ class MagData:
         
     def plot_lines(self, plotfn, lines=None, **kw):
         if lines is None:
-            lines = self.data.index.get_level_values('Line').unique()
+            lines = self.get_lines()
         for line in lines:
             axs = plotfn(self, line, **kw)
             axs[0].set_title(f"Line: {line}")        
