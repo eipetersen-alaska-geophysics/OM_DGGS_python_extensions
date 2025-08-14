@@ -13,6 +13,10 @@ setup(
         "scipy",
         "pyproj"
     ],
+    include_package_data=True,
+    package_data={
+        "magproc": ["*.csv"],
+    },
     entry_points={
         'console_scripts': [
             'magproc=magproc.pipeline:main',
