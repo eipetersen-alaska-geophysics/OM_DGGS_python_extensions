@@ -99,6 +99,12 @@ the proper symmetric 4th difference formula used by GSC for airborne magnetic QC
 Comparing this to the numpy calculation I find that the results are essentially exactly
 the same; they are just shifted in their indices. However we do want to use the 
 properly documented/industry standard formula!
+
+##################### UPDATE 2025-09-16 by Eric Petersen #####################
+Updated to add a new OOS count tag to the 4th difference noise noting how many data points
+are exceeding DOUBLE the threshold.
+Also to calculate the total line km in the .gdb and the % OOS for drape, to 
+display on the QC script completion window.
 """
 
 import numpy as np
@@ -253,7 +259,7 @@ def rungx():
     out_path_diurnal = out_path + '/OOS_diurnal.csv'
     out_path_drape = out_path + '/OOS_drape.csv'
     # Pandas dataframes for storing summary values:
-    noise_summary = pd.DataFrame(columns=['Flight', 'Line','OOS_Count'])
+    noise_summary = pd.DataFrame(columns=['Flight', 'Line','OOS_Count','Double_OOS_Count'])
     diurnal_summary = pd.DataFrame(columns=['Flight', 'Line', 'OOS_Count_15chord', 'OOS_Count_60chord'])
     drape_summary = pd.DataFrame(columns=['Flight', 'Line', 'Fid_start','Fid_end','Length_OOS','Max_drape_dev','Avg_drape_dev','Avg_speed'])
 
@@ -379,12 +385,20 @@ def rungx():
         # Calculate Speed:
         # Note that in calling UTCTIME to calculate speed instead of hard-coding the data frequency that this script is agnostic/generalized 
         #           to data recorded in different Hz.
-        step_distance = np.sqrt( (shift_right(EASTING) - EASTING)**2 + (shift_right(NORTHING) - NORTHING)**2 )
-        speed_values = step_distance / (UTCTIME - shift_right(UTCTIME))
+        step_distance = np.sqrt( (shift_right(EASTING) - EASTING)**2 + (shift_right(NORTHING) - NORTHING)**2 ) # Calculate Step Distance
+        speed_values = step_distance / (UTCTIME - shift_right(UTCTIME)) # Calculate speed
         drape_deviation = GPSALT - SURFACE # deviation from drape
         gdb.write_channel(line, drape_deviation_channel, drape_deviation, fid) # Write drape deviation values to gdb.
         gdb.write_channel(line, step_distance_channel, step_distance, fid) # Write step distance values to gdb.
         gdb.write_channel(line, speed_channel, speed_values, fid) # Write speed values to gdb.
+
+        # Calculate line length and track total line km for gdb:
+        line_len = np.nansum(step_distance)
+        try: total_line_km
+        except NameError:
+            total_line_km = line_len/1000
+        else: total_line_km += line_len/1000
+
 
         # Detect and record out-of-spec segments for drape:
         OOS_drape, OOS_drape_mask = auto_drape_analysis(flight_num, line, drape_deviation, step_distance, speed_values, FIDCOUNT) # calling function defined above
@@ -397,12 +411,14 @@ def rungx():
         gdb.write_channel(line, MAGCOM_2nd_channel, np.diff(MAGCOM, n=2), fid) # save 2nd difference to gdb
         gdb.write_channel(line, MAGCOM_4th_channel, MAG_4th_diff, fid) # save 4th difference to gdb
         # Identify if there is OOS 4th difference on this line:
-        OOS_4th_mask = (np.abs(MAG_4th_diff) > MAG_4th_diff_OOS_threshold) # Where 4th diff noise out-of-spec mask. 
+        OOS_4th_mask = (np.abs(MAG_4th_diff) > MAG_4th_diff_OOS_threshold) # Where 4th diff noise out-of-spec mask.
+        super_OOS_4th_mask  = (np.abs(MAG_4th_diff) > 2*MAG_4th_diff_OOS_threshold) # Where 4th diff noise is doubly OOS.
         OOS_4th = sum ( OOS_4th_mask) # Number of data points for which 4th difference noise out-of-spec.
+        super_OOS_4th = sum(super_OOS_4th_mask)
         gdb.write_channel(line, mag_4th_diff_OOS_channel, OOS_4th_mask.astype('int8'), fid) # Write the OOS mask to gdb
         if OOS_4th>0: # If any out of spec records.
             OOS_4th_line_count += 1 # add a line to the count!
-            noise_summary.loc[len(noise_summary)] = [flight_num, line, OOS_4th] # Append the line to the noise_summary.
+            noise_summary.loc[len(noise_summary)] = [flight_num, line, OOS_4th, super_OOS_4th] # Append the line to the noise_summary.
 
     ################ SAVE SUMMARY FILES #########################
     # Noise summary
@@ -415,10 +431,11 @@ def rungx():
     OOS_drape_segment_count = len(drape_summary)
     OOS_drape_line_count = len(drape_summary['Line'].unique())
     OOS_drape_meters = np.sum(drape_summary['Length_OOS'])
+    OOS_drape_percentage = OOS_drape_meters / (10 * total_line_km )
     if OOS_drape_segment_count > 0:
         drape_summary.to_csv(out_path_drape, float_format="%.0f", index=False)
 
-    sum_text = "{} lines ({} segments, {:.1f} line-km total) with drape out of spec. \n {} lines with diurnal out of spec. \n {} lines with potential noise problems. \n\n Summary files saved to {} \n\n Please move summary files to appropriate archive directory.".format(OOS_drape_line_count, OOS_drape_segment_count, OOS_drape_meters/1000, OOS_diurnal_line_count, OOS_4th_line_count, out_path)
+    sum_text = "{} lines ({} segments, {:.1f} line-km total) with drape out of spec. That's {:.1f}% of the {:.1f} total line km for the survey. \n {} lines with diurnal out of spec. \n {} lines with potential noise problems. \n\n Summary files saved to {} \n\n Please move summary files to appropriate archive directory.".format(OOS_drape_line_count, OOS_drape_segment_count, OOS_drape_meters/1000, OOS_drape_percentage, total_line_km, OOS_diurnal_line_count, OOS_4th_line_count, out_path)
 
     gxapi.GXSYS.display_message("QC Calculations Complete.", sum_text)
 
