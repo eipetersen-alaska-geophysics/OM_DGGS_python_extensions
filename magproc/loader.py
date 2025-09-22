@@ -23,13 +23,13 @@ def parse(filepath):
 
     if header_line is None or data_start_pos is None:
         # No comment-style header found — assume standard CSV
-        return pd.read_csv(filepath)
-
-    # Otherwise, use custom logic
-    with open(filepath, 'r', encoding='utf-8') as f:
-        f.seek(data_start_pos)
-        column_names = [col.strip() for col in header_line.split(',')]
-        df = pd.read_csv(f, header=None, names=column_names)
+        df = pd.read_csv(filepath)
+    else:
+        # Otherwise, use custom logic
+        with open(filepath, 'r', encoding='utf-8') as f:
+            f.seek(data_start_pos)
+            column_names = [col.strip() for col in header_line.split(',')]
+            df = pd.read_csv(f, header=None, names=column_names)
 
     df = df.rename(columns=normalize)
     
