@@ -105,6 +105,10 @@ Updated to add a new OOS count tag to the 4th difference noise noting how many d
 are exceeding DOUBLE the threshold.
 Also to calculate the total line km in the .gdb and the % OOS for drape, to 
 display on the QC script completion window.
+
+##################### UPDATE 2025-09-24 by Eric Petersen #####################
+Updated to output new summary statistics file for OOS drape by line. Previous OOS drape summmary outputs
+are now labeled "_by_segment"
 """
 
 import numpy as np
@@ -257,11 +261,13 @@ def rungx():
     # Prep output file paths
     out_path_noise = out_path + '/OOS_4th_difference.csv'
     out_path_diurnal = out_path + '/OOS_diurnal.csv'
-    out_path_drape = out_path + '/OOS_drape.csv'
+    out_path_drape = out_path + '/OOS_drape_by_segment.csv'
+    out_path_drape_by_line = out_path + '/OOS_drape_by_line.csv'
     # Pandas dataframes for storing summary values:
     noise_summary = pd.DataFrame(columns=['Flight', 'Line','OOS_Count','Double_OOS_Count'])
     diurnal_summary = pd.DataFrame(columns=['Flight', 'Line', 'OOS_Count_15chord', 'OOS_Count_60chord'])
     drape_summary = pd.DataFrame(columns=['Flight', 'Line', 'Fid_start','Fid_end','Length_OOS','Max_drape_dev','Avg_drape_dev','Avg_speed'])
+    drape_summary_by_line = pd.DataFrame(columns=['Flight', 'Line', 'Line_length','OOS_length_overdrape','OOS_length_underdrape','OOS_total_length','OOS_length_overdrape_percent','OOS_length_underdrape_percent','OOS_total_percent'])
 
     ################## SELECT DATABASE ####################################################
     # Prompt user to select database, default to current if any
@@ -405,7 +411,11 @@ def rungx():
         gdb.write_channel(line, drape_OOS_channel, OOS_drape_mask, fid) # Write the drape OOS mask to the gdb.
         if OOS_drape is not None:
             drape_summary = pd.concat([drape_summary, OOS_drape], ignore_index=True) # add OOS drape segments to summary dataframe
-
+            # Construct drape summary by line:
+            len_overdrape = np.sum(OOS_drape['Length_OOS'][(OOS_drape['Avg_drape_dev']>0)])
+            len_underdrape = np.sum(OOS_drape['Length_OOS'][(OOS_drape['Avg_drape_dev']<0)])
+            line_len_OOS_drape = len_overdrape + len_underdrape
+            drape_summary_by_line.loc[len(drape_summary_by_line)] = [flight_num, line, line_len, len_overdrape, len_underdrape, line_len_OOS_drape, len_overdrape/line_len*100, len_underdrape/line_len*100, line_len_OOS_drape/line_len*100]
         ################ NOISE QC #########################
         MAG_4th_diff = fourth_difference(MAGCOM) # 4th difference values. Discrete. Non-normalized. Was originally calculated using #np.diff(MAGCOM, n=4)
         gdb.write_channel(line, MAGCOM_2nd_channel, np.diff(MAGCOM, n=2), fid) # save 2nd difference to gdb
@@ -434,6 +444,7 @@ def rungx():
     OOS_drape_percentage = OOS_drape_meters / (10 * total_line_km )
     if OOS_drape_segment_count > 0:
         drape_summary.to_csv(out_path_drape, float_format="%.0f", index=False)
+        drape_summary_by_line.to_csv(out_path_drape_by_line, float_format="%.0f", index=False)
 
     sum_text = "{} lines ({} segments, {:.1f} line-km total) with drape out of spec. That's {:.1f}% of the {:.1f} total line km for the survey. \n {} lines with diurnal out of spec. \n {} lines with potential noise problems. \n\n Summary files saved to {} \n\n Please move summary files to appropriate archive directory.".format(OOS_drape_line_count, OOS_drape_segment_count, OOS_drape_meters/1000, OOS_drape_percentage, total_line_km, OOS_diurnal_line_count, OOS_4th_line_count, out_path)
 
