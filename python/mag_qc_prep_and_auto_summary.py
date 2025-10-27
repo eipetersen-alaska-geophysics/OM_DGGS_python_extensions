@@ -449,8 +449,8 @@ def rungx():
         drape_summary.to_csv(out_path_drape, float_format="%.0f", index=False)
         drape_summary_by_line.to_csv(out_path_drape_by_line, float_format="%.0f", index=False)
 
-    sum_text_for_file = "{} lines ({} segments, {:.1f} line-km total) with drape out of spec. That's {:.1f}% of the {:.1f} total line km for the survey. \n {} lines with diurnal out of spec. \n {} lines with potential noise problems."
-    sum_text = sum_text_for_file + "\n\n Summary files saved to {} \n\n Please move summary files to appropriate archive directory.".format(OOS_drape_line_count, OOS_drape_segment_count, OOS_drape_meters/1000, OOS_drape_percentage, total_line_km, OOS_diurnal_line_count, OOS_4th_line_count, out_path)
+    sum_text_for_file = "{} lines ({} segments, {:.1f} line-km total) with drape out of spec. That's {:.1f}% of the {:.1f} total line km for the survey. \n {} lines with diurnal out of spec. \n {} lines with potential noise problems.".format(OOS_drape_line_count, OOS_drape_segment_count, OOS_drape_meters/1000, OOS_drape_percentage, total_line_km, OOS_diurnal_line_count, OOS_4th_line_count)
+    sum_text = sum_text_for_file + "\n\n Summary files saved to {} \n\n Please move summary files to appropriate archive directory.".format(out_path)
     # Write summary text to file:
     outpath_summary = out_path + 'OOS_summary.txt'
     with open(outpath_summary, "w") as f:
