@@ -112,6 +112,9 @@ are now labeled "_by_segment"
 
 ##################### UPDATE 2025-10-17 by Eric Petersen #####################
 Updated to output high-level text summary as displayed in pop-up window to "OOS_summary.txt" file.
+
+##################### UPDATE 2025-12-23 by Eric Petersen #####################
+Summary text modified for more details and readability.
 """
 
 import numpy as np
@@ -247,6 +250,19 @@ def auto_drape_analysis(flight, line, drape_deviance, step_dist, speed, fid, zto
     else:
         return None, OOS_drape_mask
 
+def read_gdb_channel(gdb, line, channel_name, fiducial):
+    """ 
+    This function will read the channel, and if it is an empty channel,
+    it will return an array of nans the size of the provided fiducial channel
+    array instead.
+    """
+    DATA, fid = gdb.read_channel(line, channel_name)
+
+    if len(DATA) == 0:
+        DATA = np.full_like(fiducial, np.nan)
+    
+    return DATA
+
 ################## ACTUAL SCRIPT THAT RUNS IN OM MENU ####################################################
 def rungx():
     gxp = gxpy.gx.gx()
@@ -326,25 +342,27 @@ def rungx():
     zero_channel = add_channel(gdb, "zero") # Zero
 
     # Set Counters for Lines out of spec (OOS):
+    total_num_records = 0
     OOS_4th_line_count = 0
     OOS_diurnal_line_count = 0
     ################### WORK THROUGH EACH LINE: ####################################################
     for line in gdb.list_lines():
         # Retrieve data in array format for channel math:
-        UTCTIME, fid = gdb.read_channel(line, 'UTCTIME')
-        DIURNAL, fid = gdb.read_channel(line, 'DIURNAL')
-        EASTING, fid = gdb.read_channel(line, 'EASTING')
-        NORTHING, fid = gdb.read_channel(line, 'NORTHING')
-        SURFACE, fid = gdb.read_channel(line, 'SURFACE')
-        MAGCOM, fid = gdb.read_channel(line, 'MAGCOM')
-        GPSALT, fid = gdb.read_channel(line, 'GPSALT')
-        FLIGHT, fid = gdb.read_channel(line, 'FLIGHT')
         FIDCOUNT, fid = gdb.read_channel(line, 'FIDCOUNT')
+        UTCTIME = read_gdb_channel(gdb, line, 'UTCTIME', FIDCOUNT)
+        DIURNAL = read_gdb_channel(gdb, line, 'DIURNAL', FIDCOUNT)
+        EASTING = read_gdb_channel(gdb, line, 'EASTING', FIDCOUNT)
+        NORTHING = read_gdb_channel(gdb, line, 'NORTHING', FIDCOUNT)
+        SURFACE = read_gdb_channel(gdb, line, 'SURFACE', FIDCOUNT)
+        MAGCOM = read_gdb_channel(gdb, line, 'MAGCOM', FIDCOUNT)
+        GPSALT = read_gdb_channel(gdb, line, 'GPSALT', FIDCOUNT)
+        FLIGHT = read_gdb_channel(gdb, line, 'FLIGHT', FIDCOUNT)
+        
         flight_num = FLIGHT[0]
 
         ################ CONSTANT VALUE ARRAYS AND CHANNELS FOR PLOTTING/ANALYSIS #########################
-        dummy = np.full_like(DIURNAL, np.nan, dtype=float) # To be used for infilling with dummy values.
-        ones = np.full_like(DIURNAL, 1, dtype=float) # To be used for infilling with constant values.
+        dummy = np.full_like(EASTING, np.nan, dtype=float) # To be used for infilling with dummy values.
+        ones = np.full_like(EASTING, 1, dtype=float) # To be used for infilling with constant values.
         gdb.write_channel(line, p_3_channel, ones*3, fid) # Positive 3
         gdb.write_channel(line, m_3_channel, ones*-3, fid) # Negative 3
         gdb.write_channel(line, p_0p5_channel, ones*0.5, fid) # Positive 0.5
@@ -354,6 +372,9 @@ def rungx():
         gdb.write_channel(line, p_0p01_channel, ones*0.01, fid) # Positive 0.01
         gdb.write_channel(line, m_0p01_channel, ones*-0.01, fid) # Negative 0.01
         gdb.write_channel(line, zero_channel, ones*0, fid) # Zeros
+
+        line_num_records = len(dummy)
+        total_num_records += line_num_records # keep track of total number of records in the gdb.
 
         ################ DIURNAL QC FOR 15 SECOND CHORD #########################
         # Calculate L_magD_15
@@ -437,9 +458,14 @@ def rungx():
     # Noise summary
     if OOS_4th_line_count > 0: # save only if any lines out-of-spec.
         noise_summary.to_csv(out_path_noise, index=False)
+        # Calculate percentage of data points flagged:
+        percent_noise_flag = noise_summary['OOS_Count'].sum() / total_num_records * 100
+    else: percent_noise_flag = 0 
     # Diurnal summary
     if OOS_diurnal_line_count > 0: # save only if any lines out-of-spec.
         diurnal_summary.to_csv(out_path_diurnal, index=False)
+        percent_diurnal_flag = np.max( [diurnal_summary['OOS_Count_15chord'].sum() , diurnal_summary['OOS_Count_60chord'].sum()] )/ total_num_records * 100 
+    else: percent_diurnal_flag = 0 
     # Drape summary
     OOS_drape_segment_count = len(drape_summary)
     OOS_drape_line_count = len(drape_summary['Line'].unique())
@@ -449,8 +475,8 @@ def rungx():
         drape_summary.to_csv(out_path_drape, float_format="%.0f", index=False)
         drape_summary_by_line.to_csv(out_path_drape_by_line, float_format="%.0f", index=False)
 
-    sum_text_for_file = "{} lines ({} segments, {:.1f} line-km total) with drape out of spec. That's {:.1f}% of the {:.1f} total line km for the survey. \n {} lines with diurnal out of spec. \n {} lines with potential noise problems.".format(OOS_drape_line_count, OOS_drape_segment_count, OOS_drape_meters/1000, OOS_drape_percentage, total_line_km, OOS_diurnal_line_count, OOS_4th_line_count)
-    sum_text = sum_text_for_file + "\n\n Summary files saved to {} \n\n Please move summary files to appropriate archive directory.".format(out_path)
+    sum_text_for_file = "DRAPE:\n {} lines ({} segments, {:.1f} line-km total) out of spec. \n That's {:.1f}% of the {:.1f} total line km for the survey. \n\nDIURNALS:\n {} lines, {:.2f}% of total records flagged. \n\n4TH DIFF NOISE:\n {} lines, {:.2f}% of total records flagged. ".format(OOS_drape_line_count, OOS_drape_segment_count, OOS_drape_meters/1000, OOS_drape_percentage, total_line_km, OOS_diurnal_line_count, percent_diurnal_flag, OOS_4th_line_count, percent_noise_flag)
+    sum_text = "==== QC CALCULATIONS COMPLETE ====\n\n"+ sum_text_for_file + "\n\n Summary files saved to {} \n\n Please move summary files to appropriate archive directory.".format(out_path)
     # Write summary text to file:
     outpath_summary = out_path + 'OOS_summary.txt'
     with open(outpath_summary, "w") as f:
